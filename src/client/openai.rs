@@ -48,6 +48,24 @@ fn prepare_chat_completions(
         .get_api_base()
         .unwrap_or_else(|_| API_BASE.to_string());
 
+    let use_responses_api = self_
+        .extra_config()
+        .and_then(|v| v.use_responses_api)
+        .unwrap_or(false);
+    if use_responses_api {
+        let responses_api_base = self_
+            .extra_config()
+            .and_then(|v| v.responses_api_base.clone())
+            .unwrap_or_else(|| api_base.clone());
+        return openai_responses::prepare_responses_request(
+            &responses_api_base,
+            Some(&api_key),
+            data,
+            &self_.model,
+            self_.config.organization_id.as_deref(),
+        );
+    }
+
     let url = format!("{}/chat/completions", api_base.trim_end_matches('/'));
 
     let body = openai_build_chat_completions_body(data, &self_.model);

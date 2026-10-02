@@ -55,6 +55,7 @@ pub async fn run(config: GlobalConfig, addr: Option<String>) -> Result<()> {
     let listener = TcpListener::bind(&addr).await?;
     let stop_server = server.run(listener).await?;
     println!("Chat Completions API: http://{addr}/v1/chat/completions");
+    println!("Responses API:        http://{addr}/v1/responses");
     println!("Embeddings API:       http://{addr}/v1/embeddings");
     println!("Rerank API:           http://{addr}/v1/rerank");
     println!("LLM Playground:       http://{addr}/playground");
@@ -156,8 +157,10 @@ impl Server {
 
         let mut status = StatusCode::OK;
         let res = if path == "/v1/chat/completions" {
-            self.chat_completions(req).await
-        } else if path == "/v1/embeddings" {
+                self.chat_completions(req).await
+            } else if path == "/v1/responses" {
+                self.responses(req).await
+            } else if path == "/v1/embeddings" {
             self.embeddings(req).await
         } else if path == "/v1/rerank" {
             self.rerank(req).await
@@ -467,6 +470,186 @@ impl Server {
         }
     }
 
+    /// OpenAI `/v1/responses` compatible endpoint: accepts a CreateResponse body,
+    /// executes it against the configured client, and returns a `Response` object
+    /// (non-stream) or a Responses SSE event stream (stream).
+    async fn responses(&self, req: hyper::Request<Incoming>) -> Result<AppResponse> {
+        let req_body = req.collect().await?.to_bytes();
+        let req_body: Value = serde_json::from_slice(&req_body)
+            .map_err(|err| anyhow!("Invalid request json, {err}"))?;
+
+        debug!("responses request: {req_body}");
+        let req_body: ResponsesReqBody = serde_json::from_value(req_body)
+            .map_err(|err| anyhow!("Invalid request body, {err}"))?;
+
+        let ResponsesReqBody {
+            model,
+            input,
+            instructions,
+            temperature,
+            top_p,
+            max_output_tokens,
+            stream,
+            tools,
+        } = req_body;
+
+        let messages = parse_responses_input(input, instructions)
+            .map_err(|err| anyhow!("Invalid request body, {err}"))?;
+        let functions = parse_tools(tools).map_err(|err| anyhow!("Invalid request body, {err}"))?;
+
+        let config = self.config.clone();
+        let default_model = config.model.clone();
+
+        let config = Arc::new(RwLock::new(config));
+
+        let (model_name, change) = if model == DEFAULT_MODEL_NAME {
+            (default_model.id(), true)
+        } else if default_model.id() == model {
+            (model, false)
+        } else {
+            (model, true)
+        };
+
+        if change {
+            config.write().set_model(&model_name)?;
+        }
+
+        let mut client = init_client(&config, None)?;
+        if let Some(max_output_tokens) = max_output_tokens {
+            client.model_mut().set_max_tokens(Some(max_output_tokens), true);
+        }
+        let abort_signal = create_abort_signal();
+        let http_client = client.build_client()?;
+
+        let response_id = generate_completion_id();
+        let created = Utc::now().timestamp();
+
+        let mut messages = messages;
+        patch_messages(&mut messages, client.model());
+
+        let data: ChatCompletionsData = ChatCompletionsData {
+            messages,
+            temperature,
+            top_p,
+            functions,
+            stream,
+        };
+
+        if stream {
+            let (tx, mut rx) = unbounded_channel();
+            tokio::spawn(async move {
+                let (sse_tx, sse_rx) = unbounded_channel();
+                let mut handler = SseHandler::new(sse_tx, abort_signal);
+                async fn map_event(
+                    mut sse_rx: UnboundedReceiver<SseEvent>,
+                    tx: &UnboundedSender<ResEvent>,
+                ) {
+                    let mut started = false;
+                    while let Some(reply_event) = sse_rx.recv().await {
+                        match reply_event {
+                            SseEvent::Text(text) => {
+                                if !started {
+                                    let _ = tx.send(ResEvent::First(None));
+                                    started = true;
+                                }
+                                let _ = tx.send(ResEvent::Text(text));
+                            }
+                            SseEvent::Done => {
+                                if started {
+                                    let _ = tx.send(ResEvent::MessageDone);
+                                }
+                                let _ = tx.send(ResEvent::Done);
+                                sse_rx.close();
+                            }
+                        }
+                    }
+                }
+                async fn chat_completions(
+                    client: &dyn Client,
+                    http_client: &reqwest::Client,
+                    handler: &mut SseHandler,
+                    data: ChatCompletionsData,
+                    tx: &UnboundedSender<ResEvent>,
+                ) {
+                    let ret = client
+                        .chat_completions_streaming_inner(http_client, handler, data)
+                        .await;
+                    if let Err(err) = ret {
+                        let _ = tx.send(ResEvent::Error(format!("{err:?}")));
+                    }
+                    // Send Done while map_event is still in the join! to release it.
+                    handler.done();
+                }
+                let (_, ()) = tokio::join!(
+                    map_event(sse_rx, &tx),
+                    chat_completions(client.as_ref(), &http_client, &mut handler, data, &tx),
+                );
+            });
+
+            let shared: Arc<(String, String, i64)> =
+                Arc::new((response_id, model_name, created));
+            let stream = UnboundedReceiverStream::new(rx);
+            let first_text = Arc::new(AtomicBool::new(true));
+            let stream = stream.filter_map(move |res_event| {
+                let shared = shared.clone();
+                let first_text = first_text.clone();
+                async move {
+                    let (response_id, model, created) = shared.as_ref();
+                    match res_event {
+                        ResEvent::First(_) => Some(Ok(create_responses_created_frame(
+                            response_id, model, *created,
+                        ))),
+                        ResEvent::Text(text) => {
+                            let is_first = first_text.swap(false, Ordering::SeqCst);
+                            Some(Ok(create_responses_text_frame(
+                                response_id, model, *created, &text, is_first,
+                            )))
+                        }
+                        ResEvent::ToolCalls(tool_calls) => {
+                            Some(Ok(create_responses_tool_calls_frame(
+                                response_id,
+                                model,
+                                *created,
+                                &tool_calls,
+                            )))
+                        }
+                        ResEvent::MessageDone => Some(Ok(create_responses_message_done_frame(
+                            response_id, model, *created,
+                        ))),
+                        ResEvent::Error(err) => Some(Ok(create_responses_error_frame(
+                            response_id, model, *created, &err,
+                        ))),
+                        ResEvent::Done => Some(Ok(create_responses_completed_frame(
+                            response_id, model, *created,
+                        ))),
+                        _ => None,
+                    }
+                }
+            });
+            let res = Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "text/event-stream")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "keep-alive")
+                .body(BodyExt::boxed(StreamBody::new(stream)))?;
+            Ok(res)
+        } else {
+            let output = client.chat_completions_inner(&http_client, data).await?;
+            let res = Response::builder()
+                .header("Content-Type", "application/json")
+                .body(
+                    Full::new(ret_responses_non_stream(
+                        &response_id,
+                        &model_name,
+                        created,
+                        &output,
+                    ))
+                    .boxed(),
+                )?;
+            Ok(res)
+        }
+    }
+
     async fn embeddings(&self, req: hyper::Request<Incoming>) -> Result<AppResponse> {
         let req_body = req.collect().await?.to_bytes();
         let req_body: Value = serde_json::from_slice(&req_body)
@@ -594,6 +777,148 @@ struct ChatCompletionsReqBody {
     tools: Option<Vec<Value>>,
 }
 
+/// CreateResponse body for the /v1/responses endpoint (subset of fields).
+#[derive(Debug, Deserialize)]
+struct ResponsesReqBody {
+    model: String,
+    /// A text string or a list of input items (EasyInputMessage / function_call / function_call_output).
+    input: Value,
+    instructions: Option<String>,
+    temperature: Option<f64>,
+    top_p: Option<f64>,
+    max_output_tokens: Option<isize>,
+    #[serde(default)]
+    stream: bool,
+    tools: Option<Vec<Value>>,
+}
+
+/// Parse the Responses API `input` (string or item list) plus `instructions`
+/// into internal messages.
+fn parse_responses_input(input: Value, instructions: Option<String>) -> Result<Vec<Message>> {
+    let mut output = vec![];
+    if let Some(instructions) = instructions {
+        output.push(Message::new(
+            MessageRole::System,
+            MessageContent::Text(instructions),
+        ));
+    }
+    match input {
+        Value::String(text) => output.push(Message::new(
+            MessageRole::User,
+            MessageContent::Text(text),
+        )),
+        Value::Array(items) => {
+            // Buffer function_call -> following function_call_output items into
+            // a single assistant ToolCalls message (internal representation).
+            let mut pending_calls: Vec<(Option<String>, String, Value)> = vec![];
+            for (i, item) in items.into_iter().enumerate() {
+                let err = || anyhow!("Failed to parse '.input[{i}]'");
+                let item_type = item.get("type").and_then(|v| v.as_str());
+                match item_type {
+                    Some("function_call") => {
+                        let name = item["name"].as_str().ok_or_else(err)?;
+                        let arguments = item["arguments"]
+                            .as_str()
+                            .unwrap_or("{}")
+                            .parse()
+                            .map_err(|_| err())?;
+                        pending_calls.push((
+                            item["call_id"].as_str().map(|v| v.to_string()),
+                            name.to_string(),
+                            arguments,
+                        ));
+                    }
+                    Some("function_call_output") => {
+                        let call_id = item["call_id"].as_str().map(|v| v.to_string());
+                        let output_text = match &item["output"] {
+                            Value::String(s) => s.clone(),
+                            v => v.to_string(),
+                        };
+                        // Find and complete the matching call.
+                        let idx = pending_calls
+                            .iter()
+                            .position(|(id, _, _)| id.as_deref() == call_id.as_deref())
+                            .ok_or_else(err)?;
+                        let (id, name, arguments) = pending_calls.remove(idx);
+                        // Flush previous completed pair (simplified: one pair per message)
+                        let tool_result = ToolResult::new(
+                            ToolCall::new(name, arguments, id),
+                            serde_json::from_str::<Value>(&output_text)
+                                .unwrap_or_else(|_| Value::String(output_text.clone())),
+                        );
+                        output.push(Message::new(
+                            MessageRole::Assistant,
+                            MessageContent::ToolCalls(MessageContentToolCalls::new(
+                                vec![tool_result],
+                                String::new(),
+                            )),
+                        ));
+                    }
+                    _ => {
+                        // EasyInputMessage: {role, content} where content is a string
+                        // or a list of {type: "input_text"/"text", text} parts.
+                        if pending_calls.len() == 1 {
+                            // flush a dangling single function_call as its own message later
+                        }
+                        let role = item["role"].as_str().ok_or_else(err)?;
+                        let role = match role {
+                            "system" | "developer" => MessageRole::System,
+                            "assistant" => MessageRole::Assistant,
+                            "user" => MessageRole::User,
+                            _ => return Err(err()),
+                        };
+                        let text = match item.get("content") {
+                            Some(Value::String(s)) => s.clone(),
+                            Some(Value::Array(parts)) => parts
+                                .iter()
+                                .filter_map(|part| part["text"].as_str())
+                                .collect::<Vec<_>>()
+                                .join(""),
+                            _ => String::new(),
+                        };
+                        if !pending_calls.is_empty() {
+                            // assistant text following function calls: emit calls first
+                            let calls = std::mem::take(&mut pending_calls);
+                            let tool_calls_msg = MessageContent::ToolCalls(
+                                MessageContentToolCalls::new(
+                                    calls
+                                        .into_iter()
+                                        .map(|(id, name, arguments)| {
+                                            ToolResult::new(
+                                                ToolCall::new(name, arguments, id),
+                                                Value::Null,
+                                            )
+                                        })
+                                        .collect(),
+                                    String::new(),
+                                ),
+                            );
+                            output.push(Message::new(MessageRole::Assistant, tool_calls_msg));
+                        }
+                        output.push(Message::new(role, MessageContent::Text(text)));
+                    }
+                }
+            }
+            // Flush any dangling function calls.
+            if !pending_calls.is_empty() {
+                let calls = pending_calls;
+                let tool_calls_msg = MessageContent::ToolCalls(MessageContentToolCalls::new(
+                    calls
+                        .into_iter()
+                        .map(|(id, name, arguments)| {
+                            ToolResult::new(ToolCall::new(name, arguments, id), Value::Null)
+                        })
+                        .collect(),
+                    String::new(),
+                ));
+                output.push(Message::new(MessageRole::Assistant, tool_calls_msg));
+            }
+        }
+        _ => bail!("Invalid input"),
+    }
+    Ok(output)
+}
+
 #[derive(Debug, Deserialize)]
 struct EmbeddingsReqBody {
     input: EmbeddingsReqBodyInput,
@@ -620,6 +945,8 @@ enum ResEvent {
     First(Option<String>),
     Text(String),
     ToolCalls(Vec<ToolCall>),
+    MessageDone,
+    Error(String),
     Done,
 }
 
@@ -737,6 +1064,239 @@ fn build_chat_completion_chunk_json(id: &str, model: &str, created: i64, choice:
         "model": model,
         "choices": [choice],
     })
+}
+
+// ---- Responses API frame builders ----
+
+fn build_response_object_json(id: &str, model: &str, created: i64, status: &str) -> Value {
+    json!({
+        "id": id,
+        "object": "response",
+        "created_at": created,
+        "status": status,
+        "model": model,
+        "output": [],
+        "usage": {
+            "input_tokens": 0,
+            "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
+            "output_tokens": 0,
+            "output_tokens_details": {"reasoning_tokens": 0},
+            "total_tokens": 0,
+        },
+        "error": null,
+        "incomplete_details": null,
+    })
+}
+
+fn create_responses_text_frame(
+    id: &str,
+    _model: &str,
+    _created: i64,
+    text: &str,
+    with_item_added: bool,
+) -> Frame<Bytes> {
+    let mut buf = String::new();
+    if with_item_added {
+        let item = json!({
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "message",
+                "id": format!("msg_{id}"),
+                "role": "assistant",
+                "status": "in_progress",
+                "content": [],
+            },
+        });
+        let part = json!({
+            "type": "response.content_part.added",
+            "item_id": format!("msg_{id}"),
+            "output_index": 0,
+            "content_index": 0,
+            "part": {"type": "output_text", "text": "", "annotations": []},
+        });
+        buf.push_str(&format!("data: {item}\n\ndata: {part}\n\n"));
+    }
+    let value = json!({
+        "type": "response.output_text.delta",
+        "item_id": format!("msg_{id}"),
+        "output_index": 0,
+        "content_index": 0,
+        "delta": text,
+    });
+    buf.push_str(&format!("data: {value}\n\n"));
+    Frame::data(Bytes::from(buf))
+}
+
+fn create_responses_created_frame(id: &str, model: &str, created: i64) -> Frame<Bytes> {
+    let value = build_response_object_json(id, model, created, "in_progress");
+    let event = json!({
+        "type": "response.created",
+        "response": value,
+    });
+    Frame::data(Bytes::from(format!("data: {event}\n\n")))
+}
+
+fn create_responses_item_added_frame(id: &str, model: &str, created: i64) -> Frame<Bytes> {
+    let event = json!({
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "type": "message",
+            "id": format!("msg_{id}"),
+            "role": "assistant",
+            "status": "in_progress",
+            "content": [],
+        },
+    });
+    let part = json!({
+        "type": "response.content_part.added",
+        "item_id": format!("msg_{id}"),
+        "output_index": 0,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": "", "annotations": []},
+    });
+    let _ = (model, created);
+    Frame::data(Bytes::from(format!(
+        "data: {event}\n\ndata: {part}\n\n"
+    )))
+}
+
+fn create_responses_message_done_frame(id: &str, _model: &str, _created: i64) -> Frame<Bytes> {
+    let item = json!({
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+            "type": "message",
+            "id": format!("msg_{id}"),
+            "role": "assistant",
+            "status": "completed",
+            "content": [{"type": "output_text", "text": "", "annotations": []}],
+        },
+    });
+    let part = json!({
+        "type": "response.content_part.done",
+        "item_id": format!("msg_{id}"),
+        "output_index": 0,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": "", "annotations": []},
+    });
+    Frame::data(Bytes::from(format!(
+        "data: {item}\n\ndata: {part}\n\n"
+    )))
+}
+
+fn create_responses_tool_calls_frame(
+    id: &str,
+    model: &str,
+    created: i64,
+    tool_calls: &[ToolCall],
+) -> Frame<Bytes> {
+    let chunks = tool_calls
+        .iter()
+        .map(|call| {
+            let added = json!({
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "id": format!("fc_{id}_{}", call.id.clone().unwrap_or_default()),
+                    "call_id": call.id,
+                    "name": call.name,
+                    "arguments": call.arguments.to_string(),
+                    "status": "completed",
+                },
+            });
+            let done = json!({
+                "type": "response.function_call_arguments.done",
+                "item_id": format!("fc_{id}_{}", call.id.clone().unwrap_or_default()),
+                "output_index": 0,
+                "arguments": call.arguments.to_string(),
+            });
+            vec![
+                format!("data: {added}\n\n"),
+                format!("data: {done}\n\n"),
+            ]
+        })
+        .collect::<Vec<_>>()
+        .concat()
+        .join("");
+    let _ = (model, created);
+    Frame::data(Bytes::from(chunks))
+}
+
+fn create_responses_error_frame(id: &str, model: &str, created: i64, err: &str) -> Frame<Bytes> {
+    let mut value = build_response_object_json(id, model, created, "failed");
+    value["error"] = json!({ "code": "server_error", "message": err });
+    let event = json!({
+        "type": "response.failed",
+        "response": value,
+    });
+    Frame::data(Bytes::from(format!("data: {event}\n\n")))
+}
+
+fn create_responses_completed_frame(id: &str, model: &str, created: i64) -> Frame<Bytes> {
+    let value = build_response_object_json(id, model, created, "completed");
+    let event = json!({
+        "type": "response.completed",
+        "response": value,
+    });
+    Frame::data(Bytes::from(format!("data: {event}\n\n")))
+}
+
+/// Convert a ChatCompletionsOutput into a Responses API `Response` object.
+fn ret_responses_non_stream(
+    id: &str,
+    model: &str,
+    created: i64,
+    output: &ChatCompletionsOutput,
+) -> Bytes {
+    let response_id = output.id.as_deref().unwrap_or(id);
+    let mut output_items = vec![];
+    if !output.text.is_empty() {
+        output_items.push(json!({
+            "type": "message",
+            "id": format!("msg_{response_id}"),
+            "role": "assistant",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": output.text,
+                    "annotations": [],
+                }
+            ],
+        }));
+    }
+    for call in &output.tool_calls {
+        output_items.push(json!({
+            "type": "function_call",
+            "id": format!("fc_{response_id}_{}", call.id.clone().unwrap_or_default()),
+            "call_id": call.id,
+            "name": call.name,
+            "arguments": call.arguments.to_string(),
+            "status": "completed",
+        }));
+    }
+    let input_tokens = output.input_tokens.unwrap_or_default();
+    let output_tokens = output.output_tokens.unwrap_or_default();
+    let res_body = json!({
+        "id": response_id,
+        "object": "response",
+        "created_at": created,
+        "status": "completed",
+        "model": model,
+        "output": output_items,
+        "usage": {
+            "input_tokens": input_tokens,
+            "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
+            "output_tokens": output_tokens,
+            "output_tokens_details": {"reasoning_tokens": 0},
+            "total_tokens": input_tokens + output_tokens,
+        },
+        "error": null,
+        "incomplete_details": null,
+    });
+    Bytes::from(res_body.to_string())
 }
 
 fn ret_non_stream(id: &str, model: &str, created: i64, output: &ChatCompletionsOutput) -> Bytes {

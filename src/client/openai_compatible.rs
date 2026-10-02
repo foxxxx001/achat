@@ -42,6 +42,24 @@ fn prepare_chat_completions(
     let api_key = self_.get_api_key().ok();
     let api_base = get_api_base_ext(self_)?;
 
+    let use_responses_api = self_
+        .extra_config()
+        .and_then(|v| v.use_responses_api)
+        .unwrap_or(false);
+    if use_responses_api {
+        let responses_api_base = self_
+            .extra_config()
+            .and_then(|v| v.responses_api_base.clone())
+            .unwrap_or_else(|| api_base.clone());
+        return openai_responses::prepare_responses_request(
+            &responses_api_base,
+            api_key.as_deref(),
+            data,
+            &self_.model,
+            None,
+        );
+    }
+
     let url = format!("{api_base}/chat/completions");
 
     let body = openai_build_chat_completions_body(data, &self_.model);

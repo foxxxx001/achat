@@ -14,7 +14,8 @@ extern crate log;
 
 use crate::cli::Cli;
 use crate::client::{
-    call_chat_completions, call_chat_completions_streaming, list_models, ModelType,
+    call_chat_completions, call_chat_completions_streaming, list_client_types, list_models,
+    ModelType,
 };
 use crate::config::{
     ensure_parent_exists, list_agents, load_env_file, macro_execute, Config, GlobalConfig, Input,
@@ -36,13 +37,24 @@ async fn main() -> Result<()> {
     load_env_file()?;
     let cli = Cli::parse();
     let text = cli.text()?;
-    let working_mode = if cli.serve.is_some() {
+    let working_mode = if cli.name.is_some() || cli.init || cli.list_name {
+        WorkingMode::Cmd
+    } else if cli.serve.is_some() {
         WorkingMode::Serve
     } else if text.is_none() && cli.file.is_empty() {
         WorkingMode::Repl
     } else {
         WorkingMode::Cmd
     };
+    if cli.list_all {
+        let types = list_client_types();
+        println!("Total: {} providers\n", types.len());
+        for t in types {
+            println!("{t}");
+        }
+        return Ok(());
+    }
+
     let info_flag = cli.info
         || cli.sync_models
         || cli.list_models
@@ -50,7 +62,10 @@ async fn main() -> Result<()> {
         || cli.list_agents
         || cli.list_rags
         || cli.list_macros
-        || cli.list_sessions;
+        || cli.list_sessions
+        || cli.name.is_some()
+        || cli.init
+        || cli.list_name;
     setup_logger(working_mode.is_serve())?;
     let config = Arc::new(RwLock::new(Config::init(working_mode, info_flag).await?));
     if let Err(err) = run(config, cli, text).await {
@@ -63,9 +78,34 @@ async fn main() -> Result<()> {
 async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()> {
     let abort_signal = create_abort_signal();
 
+    if cli.sync_all {
+        return Config::sync_all_models(abort_signal).await;
+    }
+
     if cli.sync_models {
         let url = config.read().sync_models_url();
         return Config::sync_models(&url, abort_signal.clone()).await;
+    }
+
+    if cli.list_name {
+        use crate::client::list_client_names;
+        let names = list_client_names(&config.read());
+        if names.is_empty() {
+            println!("No clients defined in config.yaml. Run 'aichat --init' to add one.");
+        } else {
+            for name in names {
+                println!("{name}");
+            }
+        }
+        return Ok(());
+    }
+
+    if cli.init {
+        return crate::config::init_config(&Config::config_file()).await;
+    }
+
+    if let Some(name) = &cli.name {
+        return fetch_client_models(&config, name).await;
     }
 
     if cli.list_models {
@@ -347,6 +387,127 @@ async fn create_input(
         bail!("No input");
     }
     Ok(input)
+}
+
+async fn fetch_client_models(config: &GlobalConfig, name: &str) -> Result<()> {
+    use crate::client::ClientConfig;
+    use serde_json::Value;
+
+    let (client_name, api_base, api_key, extra) = {
+        let config = config.read();
+        let client_config = config
+            .clients
+            .iter()
+            .find(|v| client_config_name(v) == name)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Client '{}' not found in config.yaml, available clients: {}",
+                    name,
+                    config
+                        .clients
+                        .iter()
+                        .map(client_config_name)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+        match client_config {
+            ClientConfig::OpenAIConfig(c) => (
+                "openai",
+                c.api_base
+                    .clone()
+                    .unwrap_or_else(|| "https://api.openai.com/v1".into()),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            ClientConfig::OpenAICompatibleConfig(c) => (
+                "openai-compatible",
+                c.api_base.clone().unwrap_or_default(),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            ClientConfig::GeminiConfig(c) => (
+                "gemini",
+                c.api_base.clone()
+                    .unwrap_or_else(|| "https://generativelanguage.googleapis.com/v1beta/openai".into()),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            ClientConfig::ClaudeConfig(c) => (
+                "claude",
+                c.api_base.clone()
+                    .unwrap_or_else(|| "https://api.anthropic.com/v1".into()),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            ClientConfig::CohereConfig(c) => (
+                "cohere",
+                c.api_base.clone()
+                    .unwrap_or_else(|| "https://api.cohere.com/compatibility/v1".into()),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            ClientConfig::AzureOpenAIConfig(c) => (
+                "azure-openai",
+                c.api_base.clone().unwrap_or_default(),
+                c.api_key.clone(),
+                c.extra.clone(),
+            ),
+            _ => bail!("Client '{}' does not support the models api", name),
+        }
+    };
+    let _ = client_name;
+    let api_base = api_base.trim_end_matches('/');
+    let url = format!("{api_base}/models");
+    debug!("fetch models from {url}");
+
+    let mut builder = reqwest::Client::builder();
+    let timeout = extra
+        .as_ref()
+        .and_then(|v| v.connect_timeout)
+        .unwrap_or(10);
+    if let Some(proxy) = extra.as_ref().and_then(|v| v.proxy.as_deref()) {
+        builder = set_proxy(builder, proxy)?;
+    }
+    let http_client = builder
+        .connect_timeout(std::time::Duration::from_secs(timeout))
+        .build()?;
+
+    let mut req = http_client.get(&url);
+    if let Some(api_key) = &api_key {
+        req = req.bearer_auth(api_key);
+    }
+    if let Some(user_agent) = config.read().user_agent.as_ref() {
+        req = req.header("User-Agent", user_agent);
+    }
+
+    let res = req.send().await?;
+    let status = res.status();
+    let data: Value = res.json().await?;
+    if !status.is_success() {
+        if let Some(err) = data["error"]["message"].as_str() {
+            bail!("{} (status: {})", err, status.as_u16());
+        }
+        bail!("Invalid response data: {data} (status: {})", status.as_u16());
+    }
+    println!("{}", serde_json::to_string_pretty(&data)?);
+    Ok(())
+}
+
+fn client_config_name(config: &crate::client::ClientConfig) -> &str {
+    use crate::client::ClientConfig;
+    match config {
+        ClientConfig::OpenAIConfig(c) => c.name.as_deref().unwrap_or("openai"),
+        ClientConfig::OpenAICompatibleConfig(c) => c.name.as_deref().unwrap_or("openai-compatible"),
+        ClientConfig::OpenAIResponsesConfig(c) => c.name.as_deref().unwrap_or("openai-responses"),
+        ClientConfig::GeminiConfig(c) => c.name.as_deref().unwrap_or("gemini"),
+        ClientConfig::ClaudeConfig(c) => c.name.as_deref().unwrap_or("claude"),
+        ClientConfig::CohereConfig(c) => c.name.as_deref().unwrap_or("cohere"),
+        ClientConfig::AzureOpenAIConfig(c) => c.name.as_deref().unwrap_or("azure-openai"),
+        ClientConfig::VertexAIConfig(c) => c.name.as_deref().unwrap_or("vertexai"),
+        ClientConfig::BedrockConfig(c) => c.name.as_deref().unwrap_or("bedrock"),
+        ClientConfig::Unknown => "",
+    }
 }
 
 fn setup_logger(is_serve: bool) -> Result<()> {

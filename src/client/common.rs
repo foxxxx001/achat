@@ -201,6 +201,10 @@ impl Default for ClientConfig {
 pub struct ExtraConfig {
     pub proxy: Option<String>,
     pub connect_timeout: Option<u64>,
+    /// Use the OpenAI `/v1/responses` API instead of `/v1/chat/completions`
+    pub use_responses_api: Option<bool>,
+    /// Base url for the responses api when it differs from api_base
+    pub responses_api_base: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]

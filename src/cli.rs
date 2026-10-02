@@ -42,6 +42,18 @@ pub struct Cli {
     /// Serve the LLM API and WebAPP
     #[clap(long, value_name = "ADDRESS")]
     pub serve: Option<Option<String>>,
+    /// Select a client by name and fetch its /v1/models via HTTP GET
+    #[clap(short = 'n', long, value_name = "NAME")]
+    pub name: Option<String>,
+    /// Initialize/extend the config file interactively (like first-run wizard)
+    #[clap(long)]
+    pub init: bool,
+    /// List all client names defined in config.yaml
+    #[clap(long = "list-name")]
+    pub list_name: bool,
+    /// List all supported providers (built-in clients + openai-compatible providers)
+    #[clap(long = "list-all")]
+    pub list_all: bool,
     /// Execute commands in natural language
     #[clap(short = 'e', long)]
     pub execute: bool,
@@ -63,6 +75,9 @@ pub struct Cli {
     /// Sync models updates
     #[clap(long)]
     pub sync_models: bool,
+    /// Sync all providers/models from the models.dev catalog into models.yaml
+    #[clap(long = "sync-all")]
+    pub sync_all: bool,
     /// List all available chat models
     #[clap(long)]
     pub list_models: bool,

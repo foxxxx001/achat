@@ -1,9 +1,9 @@
 [package]
-name = "aichat"
-version = "0.30.0"
+name = "achat"
+version = "0.6.0"
 edition = "2021"
 authors = ["sigoden <sigoden@gmail.com>"]
-description = "All-in-one LLM CLI Tool"
+description = "All-in-one LLM CLI Tool (achat, forked from aichat with Responses API support)"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/sigoden/aichat"
 repository = "https://github.com/sigoden/aichat"
