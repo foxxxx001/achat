@@ -1,3 +1,13 @@
+## achat 0.6.0 (round 4)
+
+### Added
+
+- **Bilingual UI**: on Windows systems located in the China region (detected via OS locale,
+  LANG/LC_ALL/LANGUAGE, TZ, or UTC+8 local offset) all messages from the new features
+  (wizard/--init, --list-name, --list-all, --sync-all) are shown in Chinese; otherwise English.
+  Set `ACHAT_LANG=zh` or `ACHAT_LANG=en` to force a locale.
+- **Version banner**: `achat --version` now prints "Made by Gary-China, forked from sigoden/aichat".
+
 ## achat 0.6.0 (round 3)
 
 ### Added

@@ -87,6 +87,7 @@ AChat 按以下优先级读取配置：
 
 - `ACHAT_CONFIG_FILE` — 配置文件路径
 - `ACHAT_CONFIG_DIR` — 配置目录（默认 `~/.config/achat`）
+- `ACHAT_LANG` — 强制界面语言：`zh`（中文）或 `en`（英文）。未设置时，位于中国区的 Windows 系统自动显示中文提示。
 
 ## 示例
 

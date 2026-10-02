@@ -3,8 +3,18 @@ use clap::Parser;
 use is_terminal::IsTerminal;
 use std::io::{stdin, Read};
 
+const VERSION_EXTRA: &str = concat!(
+    env!("CARGO_PKG_VERSION"),
+    "\nMade by Gary-China, forked from sigoden/aichat"
+);
+
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(
+    author,
+    version = VERSION_EXTRA,
+    about,
+    long_about = None
+)]
 pub struct Cli {
     /// Select a LLM model
     #[clap(short, long)]

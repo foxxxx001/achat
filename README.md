@@ -87,6 +87,7 @@ AChat reads its configuration from (in order of precedence):
 
 - `ACHAT_CONFIG_FILE` — path to the config file
 - `ACHAT_CONFIG_DIR` — config directory (default `~/.config/achat`)
+- `ACHAT_LANG` — force UI language: `zh` (Chinese) or `en` (English). Without it, Windows machines in the China region automatically get Chinese messages.
 
 ## Examples
 

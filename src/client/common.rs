@@ -379,7 +379,11 @@ pub async fn create_openai_compatible_client_config(
         .unwrap_or("http(s)://{API_ADDR}/v1");
 
     let name = if client == OpenAICompatibleClient::NAME {
-        let value = prompt_input_string("Provider Name", true, None)?;
+        let value = prompt_input_string(
+            if crate::i18n::is_cn() { "供应商名称" } else { "Provider Name" },
+            true,
+            None,
+        )?;
         value.replace(' ', "-")
     } else {
         client.to_string()
@@ -391,13 +395,26 @@ pub async fn create_openai_compatible_client_config(
     });
 
     let api_base = if api_base.contains('{') {
-        prompt_input_string("API Base", true, Some(&format!("e.g. {api_base}")))?
+        let hint = if crate::i18n::is_cn() {
+            format!("例如：{api_base}")
+        } else {
+            format!("e.g. {api_base}")
+        };
+        prompt_input_string(
+            if crate::i18n::is_cn() { "接口地址 (API Base)" } else { "API Base" },
+            true,
+            Some(&hint),
+        )?
     } else {
         api_base.to_string()
     };
     config["api_base"] = api_base.into();
 
-    let api_key = prompt_input_string("API Key", false, None)?;
+    let api_key = prompt_input_string(
+        if crate::i18n::is_cn() { "API 密钥 (可选)" } else { "API Key (optional)" },
+        false,
+        None,
+    )?;
     if !api_key.is_empty() {
         config["api_key"] = api_key.into();
     }
@@ -576,7 +593,10 @@ async fn set_client_models_config(client_config: &mut Value, client: &str) -> Re
         .await
         {
             Ok(fetched_models) => {
-                model_names = MultiSelect::new("LLMs to include (required):", fetched_models)
+                model_names = MultiSelect::new(
+                    if crate::i18n::is_cn() { "选择要包含的模型（必填）：" } else { "LLMs to include (required):" },
+                    fetched_models,
+                )
                     .with_validator(|list: &[ListOption<&String>]| {
                         if list.is_empty() {
                             Ok(Validation::Invalid(

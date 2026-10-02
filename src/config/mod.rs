@@ -1867,14 +1867,19 @@ impl Config {
 /// OpenAI-compatible providers (incl. their API base as a comment).
 pub async fn sync_all_models(abort_signal: AbortSignal) -> Result<()> {
     const CATALOG_URL: &str = "https://models.dev/api.json";
-    let content = abortable_run_with_spinner(
-        fetch(CATALOG_URL),
-        "Fetching models.dev catalog",
-        abort_signal,
-    )
+    let fetching_msg = if crate::i18n::is_cn() {
+        "正在获取 models.dev 目录"
+    } else {
+        "Fetching models.dev catalog"
+    };
+    let content = abortable_run_with_spinner(fetch(CATALOG_URL), fetching_msg, abort_signal)
     .await
     .with_context(|| format!("Failed to fetch '{CATALOG_URL}'"))?;
-    println!("✓ Fetched '{CATALOG_URL}'");
+    if crate::i18n::is_cn() {
+        println!("✓ 已获取 '{CATALOG_URL}'");
+    } else {
+        println!("✓ Fetched '{CATALOG_URL}'");
+    }
 
     let catalog: IndexMap<String, serde_json::Value> =
         serde_json::from_str(&content).with_context(|| "Failed to parse catalog json")?;
@@ -1975,7 +1980,11 @@ let path = Self::models_override_file();
     }
     std::fs::write(&path, out)
         .with_context(|| format!("Failed to write to '{}'", path.display()))?;
-    println!("✓ Updated '{}' ({} providers)", path.display(), providers.len());
+    if crate::i18n::is_cn() {
+        println!("✓ 已更新 '{}'（共 {} 个供应商）", path.display(), providers.len());
+    } else {
+        println!("✓ Updated '{}' ({} providers)", path.display(), providers.len());
+    }
     Ok(())
 }
 
@@ -2741,7 +2750,11 @@ impl AssertState {
 }
 
 async fn create_config_file(config_path: &Path) -> Result<()> {
-    let ans = Confirm::new("No config file, create a new one?")
+    let ans = Confirm::new(if crate::i18n::is_cn() {
+        "未找到配置文件，是否创建新的配置文件？"
+    } else {
+        "No config file, create a new one?"
+    })
         .with_default(true)
         .prompt()?;
     if !ans {
@@ -2761,7 +2774,15 @@ pub(crate) async fn add_client_to_config(
     config_path: &Path,
     config: &mut serde_json::Value,
 ) -> Result<()> {
-    let client = Select::new("API Provider (required):", list_client_types()).prompt()?;
+    let client = Select::new(
+        if crate::i18n::is_cn() {
+            "选择 API 供应商（必填）："
+        } else {
+            "API Provider (required):"
+        },
+        list_client_types(),
+    )
+    .prompt()?;
 
     let (model, client_config) = create_client_config(&client).await?;
     // create_client_config returns a JSON array holding one client object.
@@ -2780,9 +2801,15 @@ pub(crate) async fn add_client_to_config(
         config["model"] = model.into();
     } else {
         let bin = env!("CARGO_BIN_NAME");
-        println!(
-            "  Added client '{client}'. Default model stays as-is; set with: {bin} --model {model}"
-        );
+        if crate::i18n::is_cn() {
+            println!(
+                "  已添加客户端 '{client}'。默认模型未变更；可用以下命令设置：{bin} --model {model}"
+            );
+        } else {
+            println!(
+                "  Added client '{client}'. Default model stays as-is; set with: {bin} --model {model}"
+            );
+        }
     }
     Ok(())
 }
@@ -2811,23 +2838,35 @@ pub(crate) fn save_config_file(config_path: &Path, config: &serde_json::Value) -
 /// updating config.yaml after each entry. Can be run repeatedly.
 pub(crate) async fn init_config(config_path: &Path) -> Result<()> {
     if !config_path.exists() {
-        println!(
-            "No config file at '{}'. Let's create one.\n",
-            config_path.display()
-        );
+        if crate::i18n::is_cn() {
+            println!("在 '{}' 未找到配置文件，下面开始创建。\n", config_path.display());
+        } else {
+            println!(
+                "No config file at '{}'. Let's create one.\n",
+                config_path.display()
+            );
+        }
         let mut config = serde_json::json!({});
         config[CLIENTS_FIELD] = serde_json::json!([]);
         loop {
             add_client_to_config(config_path, &mut config).await?;
             save_config_file(config_path, &config)?;
-            let more = Confirm::new("Add another client?")
+            let more = Confirm::new(if crate::i18n::is_cn() {
+                "继续添加其他客户端？"
+            } else {
+                "Add another client?"
+            })
                 .with_default(false)
                 .prompt()?;
             if !more {
                 break;
             }
         }
-        println!("\nInit finished. Start with: aichat");
+        if crate::i18n::is_cn() {
+            println!("\n初始化完成。运行 achat 开始使用。");
+        } else {
+            println!("\nInit finished. Start with: aichat");
+        }
         return Ok(());
     }
 

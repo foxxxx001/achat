@@ -1,6 +1,7 @@
 mod cli;
 mod client;
 mod config;
+mod i18n;
 mod function;
 mod rag;
 mod render;
@@ -47,8 +48,13 @@ async fn main() -> Result<()> {
         WorkingMode::Cmd
     };
     if cli.list_all {
+        use crate::i18n::is_cn;
         let types = list_client_types();
-        println!("Total: {} providers\n", types.len());
+        if is_cn() {
+            println!("共 {} 个供应商\n", types.len());
+        } else {
+            println!("Total: {} providers\n", types.len());
+        }
         for t in types {
             println!("{t}");
         }
@@ -91,7 +97,11 @@ async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()>
         use crate::client::list_client_names;
         let names = list_client_names(&config.read());
         if names.is_empty() {
-            println!("No clients defined in config.yaml. Run 'aichat --init' to add one.");
+            if crate::i18n::is_cn() {
+                println!("config.yaml 中没有客户端，运行 'achat --init' 添加一个。");
+            } else {
+                println!("No clients defined in config.yaml. Run 'achat --init' to add one.");
+            }
         } else {
             for name in names {
                 println!("{name}");
