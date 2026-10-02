@@ -1,3 +1,4 @@
+[English](./README.md) | **简体中文**
 # AChat：一体化 LLM 命令行工具
 
 AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具备 Shell 助手、CMD 与 REPL 模式、RAG、AI 工具与代理，以及兼容 OpenAI 的服务模式（含 `/v1/responses` API）等功能。

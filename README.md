@@ -1,3 +1,4 @@
+**English** | [简体中文](./readme_zh.md)
 # AChat: All-in-one LLM CLI Tool
 
 AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Assistant, CMD & REPL Mode, RAG, AI Tools & Agents, an OpenAI-compatible serve mode (including the `/v1/responses` API), and more.
