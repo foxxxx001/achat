@@ -1,4 +1,3 @@
-**English** | [简体中文](./readme_zh.md)
 # AChat: All-in-one LLM CLI Tool
 
 **English** | [简体中文](./readme_zh.md)
@@ -77,7 +76,7 @@ achat --add 'openrouter:*'              # import ALL of a provider's models
 ### datalearner.com model search
 
 ```sh
-achat --webm-cn glm                 # search datalearner.com models (case-insensitive)
+achat -webm-cn glm                  # search datalearner.com models (case-insensitive)
 achat -p json --webm-cn glm         # JSON output
 ```
 

@@ -16,6 +16,7 @@ pub fn normalize_args(args: &mut Vec<String>) {
             "-qn" => *a = "--list-name".to_string(),
             "-webp" => *a = "--webp".to_string(),
             "-webm" => *a = "--webm".to_string(),
+            "-webm-cn" => *a = "--webm-cn".to_string(),
             _ => {}
         }
     }
@@ -122,7 +123,7 @@ pub struct Cli {
     /// Search models.dev models by keyword (alias: -webm)
     #[clap(long = "webm", value_name = "KEYWORD")]
     pub webm: Option<String>,
-    /// Search datalearner.com models by keyword (case-insensitive, Chinese site)
+    /// Search datalearner.com models by keyword (alias: -webm-cn)
     #[clap(long = "webm-cn", value_name = "KEYWORD")]
     pub webm_cn: Option<String>,
     /// Export config.yaml models to another tool's config: litellm | opencode | codex

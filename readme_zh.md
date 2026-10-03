@@ -1,4 +1,3 @@
-[English](./README.md) | **简体中文**
 # AChat：一体化 LLM 命令行工具
 
 [English](./README.md) | **简体中文**
@@ -76,7 +75,7 @@ achat --add 'openrouter:*'              # 导入该供应商的全部模型
 ### datalearner.com 模型搜索
 
 ```sh
-achat --webm-cn glm                 # 在 datalearner.com 搜索模型（不区分大小写）
+achat -webm-cn glm                  # 在 datalearner.com 搜索模型（不区分大小写）
 achat -p json --webm-cn glm         # JSON 输出
 ```
 

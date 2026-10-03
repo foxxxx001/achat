@@ -1,6 +1,6 @@
 [package]
 name = "achat"
-version = "0.8.6"
+version = "0.8.7"
 edition = "2021"
 authors = ["sigoden <sigoden@gmail.com>"]
 description = "All-in-one LLM CLI Tool (achat, forked from aichat with Responses API support)"

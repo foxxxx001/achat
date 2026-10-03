@@ -118,7 +118,7 @@ All-in-one LLM CLI 工具（fork 自 aichat，支持 Responses API）。
       --add <MODEL>                添加/更新模型: [provider:]model | provider:*（全量导入）
   -webp, --webp <KEYWORD>         在 models.dev 搜索供应商（名称/模型数/接口/文档）
   -webm, --webm <KEYWORD>         在 models.dev 搜索模型（上下文/价格/能力）
-      --webm-cn <KEYWORD>          在 datalearner.com 搜索模型信息（不区分大小写）
+  -webm-cn, --webm-cn <KEYWORD>   在 datalearner.com 搜索模型信息（不区分大小写）
       --out <TOOL>                 将 config.yaml 已配置模型导出到 litellm | opencode | codex 配置文件
       --list-models                列出所有可用聊天模型
       --list-roles                 列出所有角色

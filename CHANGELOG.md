@@ -1,3 +1,7 @@
+## achat v0.8.7 — Patch Notes
+
+1. `-webm-cn`: new shorthand alias of `--webm-cn`.
+
 ## achat v0.8.6 — Patch Notes
 
 1. `-qn`: new shorthand alias of `--list-name`.
