@@ -2,6 +2,9 @@ mod cli;
 mod client;
 mod config;
 mod i18n;
+mod providers;
+mod providers_cmd;
+mod out_cmd;
 mod function;
 mod rag;
 mod render;
@@ -36,7 +39,16 @@ use std::{env, process, sync::Arc};
 #[tokio::main]
 async fn main() -> Result<()> {
     load_env_file()?;
-    let cli = Cli::parse();
+    let mut argv: Vec<String> = env::args().collect();
+    crate::cli::normalize_args(&mut argv);
+    // Chinese help override: clap's derived help is static English.
+    let wants_help = argv.iter().any(|a| a == "--help" || a == "-h");
+    if wants_help && crate::i18n::is_cn() {
+        print!("{}", crate::i18n::chinese_help());
+        return Ok(());
+    }
+    let cli = Cli::parse_from(argv);
+    crate::cli::set_output_format(cli.print_format.clone());
     let text = cli.text()?;
     let working_mode = if cli.name.is_some() || cli.init || cli.list_name {
         WorkingMode::Cmd
@@ -49,20 +61,29 @@ async fn main() -> Result<()> {
     };
     if cli.list_all {
         use crate::i18n::is_cn;
-        let types = list_client_types();
-        if is_cn() {
-            println!("共 {} 个供应商\n", types.len());
-        } else {
-            println!("Total: {} providers\n", types.len());
+        use crate::providers::PROVIDERS;
+        if cli.print_format.as_deref() == Some("json") {
+            let items: Vec<serde_json::Value> = PROVIDERS
+                .iter()
+                .map(|(n, b, o)| serde_json::json!({"name": n, "api_base": b, "open": *o == "y"}))
+                .collect();
+            println!("{}", serde_json::to_string_pretty(&items)?);
+            return Ok(());
         }
-        for t in types {
-            println!("{t}");
+        if is_cn() {
+            println!("共 {} 个供应商\n", PROVIDERS.len());
+            println!("{:<22} {:<55} open", "name", "api_base");
+        } else {
+            println!("Total: {} providers\n", PROVIDERS.len());
+            println!("{:<22} {:<55} open", "name", "api_base");
+        }
+        for (n, b, o) in PROVIDERS.iter() {
+            println!("{:<22} {:<55} {o}", n, b);
         }
         return Ok(());
     }
 
     let info_flag = cli.info
-        || cli.sync_models
         || cli.list_models
         || cli.list_roles
         || cli.list_agents
@@ -73,6 +94,22 @@ async fn main() -> Result<()> {
         || cli.init
         || cli.list_name;
     setup_logger(working_mode.is_serve())?;
+    if cli.update_providers {
+        return crate::providers_cmd::update_builtin_providers(create_abort_signal()).await;
+    }
+
+    if let Some(kw) = &cli.webm_cn {
+        return crate::providers_cmd::webm_cn(kw).await;
+    }
+
+    if let Some(kw) = &cli.webp {
+        return crate::providers_cmd::web_providers(&kw, create_abort_signal()).await;
+    }
+
+    if let Some(kw) = &cli.webm {
+        return crate::providers_cmd::web_models(&kw, create_abort_signal()).await;
+    }
+
     let config = Arc::new(RwLock::new(Config::init(working_mode, info_flag).await?));
     if let Err(err) = run(config, cli, text).await {
         render_error(err);
@@ -84,13 +121,13 @@ async fn main() -> Result<()> {
 async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()> {
     let abort_signal = create_abort_signal();
 
-    if cli.sync_all {
-        return Config::sync_all_models(abort_signal).await;
+
+    if let Some(tool) = &cli.out {
+        return crate::out_cmd::export(&config.read(), tool).await;
     }
 
-    if cli.sync_models {
-        let url = config.read().sync_models_url();
-        return Config::sync_models(&url, abort_signal.clone()).await;
+    if cli.sync_all {
+        return Config::sync_all_models(abort_signal).await;
     }
 
     if cli.list_name {
@@ -116,6 +153,16 @@ async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()>
 
     if let Some(name) = &cli.name {
         return fetch_client_models(&config, name).await;
+    }
+
+    if let Some(kw) = &cli.find_models {
+        let results = crate::providers_cmd::find_models(&config, kw).await?;
+        crate::providers_cmd::print_find_results(&results);
+        return Ok(());
+    }
+
+    if let Some(spec) = &cli.add_models {
+        return crate::providers_cmd::add_models(&config, spec).await;
     }
 
     if cli.list_models {

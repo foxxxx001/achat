@@ -1,15 +1,27 @@
 [English](./README.md) | **简体中文**
 # AChat：一体化 LLM 命令行工具
 
+[English](./README.md) | **简体中文**
+
 AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具备 Shell 助手、CMD 与 REPL 模式、RAG、AI 工具与代理，以及兼容 OpenAI 的服务模式（含 `/v1/responses` API）等功能。
 
 ## 特性
 
-- **内置 70+ 供应商**（OpenAI、Claude、Gemini、Ollama、Groq、Azure-OpenAI、Deepseek、通义千问、Moonshot、ModelScope（魔搭）、Agnes AI、AMD、SiliconFlow（硅基流动）、火山引擎、Nvidia、Fireworks、HuggingFace 等，以及任意 OpenAI 兼容接口）
-- CMD 与交互式 REPL 模式、会话、角色、代理、RAG、宏
-- Shell 助手（`-e`）：用自然语言生成并执行 shell 命令
-- 内置 API 服务器（`--serve`）：提供 `/v1/chat/completions` **和** OpenAI `/v1/responses` 接口
-- 首次运行向导与增量式 `--init` 配置构建
+- **一体化 LLM 命令行工具**：CMD 与交互式 REPL 模式、会话、角色、代理、RAG、宏，全部集成在一个二进制里（支持 Windows 与 Linux）。
+- **内置 200+ 供应商**：OpenAI、Claude、Gemini、DeepSeek、智谱、通义千问、ModelScope（魔搭）及任意 OpenAI 兼容接口；`-qa`/`--list-all` 列出全部供应商的接口地址与免密可用标志。
+- **OpenAI `/v1/responses` API 支持**：本分支的最初动机，同时兼容经典 chat completions。
+- **`--init` 增量式向导**：逐个交互式添加客户端，每完成一个即写盘 config.yaml；`-qn`/`--list-name` 列出已配置客户端。
+- **模型发现工具**：
+  - `-q <关键词>`：按 CPU 核心数多线程并行探测已配置 + 免密开放的供应商
+  - `--add [provider:]model | provider:*`：先向上游验证再写入 config.yaml
+  - `-webp` / `-webm`：搜索 models.dev 目录（供应商 / 模型的上下文、价格、能力标志）
+  - `-webm-cn`：搜索 datalearner.com 模型库（中文大模型数据库）
+  - `--sync-all`：将整个 models.dev 目录拉取到 models-override.yaml
+- **权重轮询 `-m model`**：纯模型名会在所有提供该模型的客户端间负载均衡；`weight:` 控制比例。
+- **导出到其他工具（`--out`）**：将已配置模型合并进 litellm（model_list）、opencode.json（provider.models）或 codex config.toml（model_providers）——幂等操作，自动写 .bak 备份。
+- **中英双语界面**：config.yaml 中 `language: cn`（或中文区域）切换全部提示与 `--help` 为中文，否则英文。
+- **JSON 输出**：`-p json` 适用于 `--list-all`、`-q`、`-webp`、`-webm`、`-webm-cn`。
+- **服务模式**：兼容 OpenAI 的 API 服务（含 `/v1/responses` 端点）+ Web UI。
 
 ## 配置
 
@@ -39,10 +51,66 @@ test2
 
 ```sh
 $ achat --list-all
-Total: 70 providers
-openai
-claude
+Total: 62 providers
+
+name                   api_base                                               open
+ai21                   https://api.ai21.com/studio/v1                         y
+deepinfra              https://api.deepinfra.com/v1/openai                    y
+deepseek               https://api.deepseek.com                               n
 ...
+
+`open=y` 表示该供应商的 `/v1/models` 接口无需 API 密钥即可访问。
+```
+
+### 查找与添加模型
+
+```sh
+achat -q glm                        # 在开放 + 已配置供应商中搜索 "glm"
+achat -p json -q glm                # 同样的搜索，JSON 数组输出
+achat -q openrouter:               # 只列出 openrouter 的模型
+achat --add openrouter:zai-org/glm-5.3   # 添加单个模型到指定供应商
+achat --add glm-5.3                      # 轮询所有已配置供应商
+achat --add 'openrouter:*'              # 导入该供应商的全部模型
+```
+
+### datalearner.com 模型搜索
+
+```sh
+achat --webm-cn glm                 # 在 datalearner.com 搜索模型（不区分大小写）
+achat -p json --webm-cn glm         # JSON 输出
+```
+
+### 导出模型到其他工具（`--out`）
+
+```sh
+achat --out litellm                 # 将 config.yaml 模型合并进 litellm 配置（model_list）
+achat --out opencode                # 合并进 opencode.json 的 provider.models
+achat --out codex                   # 向 ~/.codex/config.toml 添加 [model_providers.*]
+```
+`-qa` 是 `--list-all` 的简写别名。
+
+### models.dev 在线查询
+
+```sh
+achat --webp glm                    # 在 models.dev 搜索供应商（id/名称/接口/文档）
+achat --webp openai:deepseek        # 仅限 OpenAI 兼容供应商
+achat -p json --webp deepseek       # JSON 输出
+achat --webm glm-4.6                # 搜索 models.dev 全部模型（上下文/价格/能力）
+achat -p json --webm glm-4.6        # JSON 输出
+```
+
+### 权重轮询（`-m model_name`）
+
+当 `-m` 只给模型名（不带 `provider:` 前缀）时，achat 会在所有提供该模型的客户端间负载均衡。
+为模型设置 `weight` 可控制分配比例：
+
+```yaml
+clients:
+  - type: openai-compatible
+    name: provider-a
+    models:
+      - name: glm-5.3
+        weight: 3    # 被选中的概率是 weight:1 的 3 倍
 ```
 
 ## 命令行参数
@@ -71,7 +139,9 @@ claude
 | `-S, --no-stream` | 关闭流式输出 |
 | `--dry-run` | 仅显示消息而不发送 |
 | `--info` | 显示信息 |
-| `--sync-models` | 同步模型更新 |
+| `-q <关键词>` | 多线程并行搜索模型（线程数 = CPU 核心数）；`provider:` 只列出该供应商的模型 |
+| `-p <格式>` | `--list-all` 与 `-q` 的输出格式：`json` 输出 JSON 数组 |
+| `--add <[provider:]model\|provider:*>` | 上游验证后添加/更新模型到 config.yaml；`provider:*` 导入该供应商全部模型 |
 | `--sync-all` | 从 models.dev 目录同步全部供应商/模型到 models.yaml |
 | `--list-models` | 列出所有可用的对话模型 |
 | `--list-roles` | 列出所有角色 |
@@ -82,11 +152,19 @@ claude
 | `-h, --help` | 打印帮助 |
 | `-V, --version` | 打印版本号 |
 
+### 界面语言（config.yaml）
+
+```yaml
+# 界面提示语言：设为 cn 时所有提示显示中文；未设置或其他值显示英文
+language: cn
+```
+
 ## 环境变量
 
 AChat 按以下优先级读取配置：
 
 - `ACHAT_CONFIG_FILE` — 配置文件路径
+- `ACHAT_LANG` — 强制界面语言（`zh`/`en`）；config.yaml 的 `language: cn` 优先级更高
 - `ACHAT_CONFIG_DIR` — 配置目录（默认 `~/.config/achat`）
 - `ACHAT_LANG` — 强制界面语言：`zh`（中文）或 `en`（英文）。未设置时，位于中国区的 Windows 系统自动显示中文提示。
 

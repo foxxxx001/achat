@@ -113,3 +113,38 @@ pub const OPENAI_COMPATIBLE_PROVIDERS: [(&str, &str); 64] = [
     ("jina", "https://api.jina.ai/v1"),
     ("voyageai", "https://api.voyageai.com/v1"),
 ];
+/// Extract (name, api_base, api_key, model names) from all openai-compatible clients.
+pub fn compatible_client_info(config: &crate::config::Config) -> Vec<(String, String, Option<String>)> {
+    use crate::client::OpenAICompatibleClient;
+    config
+        .clients
+        .iter()
+        .filter_map(|c| match c {
+            ClientConfig::OpenAICompatibleConfig(cfg) => Some((
+                cfg.name.clone().unwrap_or_else(|| OpenAICompatibleClient::NAME.to_string()),
+                cfg.api_base.clone().unwrap_or_default(),
+                cfg.api_key.clone(),
+            )),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Mutate the models of the openai-compatible client named `name`.
+pub fn upsert_compatible_model(config: &mut crate::config::Config, name: &str, model: &str) -> bool {
+    use crate::client::OpenAICompatibleClient;
+    for c in config.clients.iter_mut() {
+        if let ClientConfig::OpenAICompatibleConfig(cfg) = c {
+            let this_name = cfg.name.clone().unwrap_or_else(|| OpenAICompatibleClient::NAME.to_string());
+            if this_name == name {
+                if !cfg.models.iter().any(|m| m.name == model) {
+                    cfg.models.push(crate::client::ModelData::new(model));
+                }
+                return true;
+            }
+        }
+    }
+    false
+}
+
+

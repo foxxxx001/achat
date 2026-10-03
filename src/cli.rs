@@ -3,10 +3,32 @@ use clap::Parser;
 use is_terminal::IsTerminal;
 use std::io::{stdin, Read};
 
-const VERSION_EXTRA: &str = concat!(
-    env!("CARGO_PKG_VERSION"),
-    "\nMade by Gary-China, forked from sigoden/aichat"
-);
+const VERSION_EXTRA: &str = concat!(env!("CARGO_PKG_VERSION"), "\nMade by Gary-China");
+
+static OUTPUT_FORMAT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+
+/// Normalize alias flags before clap parsing (clap shorts are single-char,
+/// so `-qa` / `-qn` / `-webp` / `-webm` are mapped to their long forms).
+pub fn normalize_args(args: &mut Vec<String>) {
+    for a in args.iter_mut() {
+        match a.as_str() {
+            "-qa" => *a = "--list-all".to_string(),
+            "-qn" => *a = "--list-name".to_string(),
+            "-webp" => *a = "--webp".to_string(),
+            "-webm" => *a = "--webm".to_string(),
+            _ => {}
+        }
+    }
+}
+
+/// Record the -p value at parse time for other modules to query.
+pub fn output_format() -> Option<&'static str> {
+    OUTPUT_FORMAT.get().and_then(|v| v.as_deref())
+}
+
+pub fn set_output_format(v: Option<String>) {
+    let _ = OUTPUT_FORMAT.set(v);
+}
 
 #[derive(Parser, Debug)]
 #[command(
@@ -58,12 +80,15 @@ pub struct Cli {
     /// Initialize/extend the config file interactively (like first-run wizard)
     #[clap(long)]
     pub init: bool,
-    /// List all client names defined in config.yaml
+    /// List all client names defined in config.yaml (alias: -qn)
     #[clap(long = "list-name")]
     pub list_name: bool,
     /// List all supported providers (built-in clients + openai-compatible providers)
     #[clap(long = "list-all")]
     pub list_all: bool,
+    /// Output format for --list-all: "json" for a JSON array
+    #[clap(short = 'p', value_name = "FORMAT")]
+    pub print_format: Option<String>,
     /// Execute commands in natural language
     #[clap(short = 'e', long)]
     pub execute: bool,
@@ -82,12 +107,30 @@ pub struct Cli {
     /// Display information
     #[clap(long)]
     pub info: bool,
-    /// Sync models updates
-    #[clap(long)]
-    pub sync_models: bool,
     /// Sync all providers/models from the models.dev catalog into models.yaml
     #[clap(long = "sync-all")]
     pub sync_all: bool,
+    /// Search models by keyword; "provider:" limits to one provider; prints provider:model
+    #[clap(short = 'q', value_name = "KEYWORD")]
+    pub find_models: Option<String>,
+    /// Add/update models in config.yaml: [provider:]model | provider:* (import all)
+    #[clap(long = "add", value_name = "MODEL")]
+    pub add_models: Option<String>,
+    /// Search models.dev providers by keyword (alias: -webp)
+    #[clap(long = "webp", value_name = "KEYWORD")]
+    pub webp: Option<String>,
+    /// Search models.dev models by keyword (alias: -webm)
+    #[clap(long = "webm", value_name = "KEYWORD")]
+    pub webm: Option<String>,
+    /// Search datalearner.com models by keyword (case-insensitive, Chinese site)
+    #[clap(long = "webm-cn", value_name = "KEYWORD")]
+    pub webm_cn: Option<String>,
+    /// Export config.yaml models to another tool's config: litellm | opencode | codex
+    #[clap(long = "out", value_name = "TOOL")]
+    pub out: Option<String>,
+    /// (dev) fetch models.dev and append providers missing from the built-in list
+    #[clap(long = "update-providers", hide = true)]
+    pub update_providers: bool,
     /// List all available chat models
     #[clap(long)]
     pub list_models: bool,

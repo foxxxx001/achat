@@ -88,6 +88,27 @@ impl Model {
         bail!("Unknown {model_type} model '{model_id}'")
     }
 
+    /// Weighted round-robin pick among same-named candidates.
+    pub fn pick_weighted(candidates: &[&Model]) -> Option<Model> {
+        use std::sync::atomic::Ordering;
+        if candidates.is_empty() {
+            return None;
+        }
+        let weights: Vec<u32> = candidates
+            .iter()
+            .map(|c| c.data.weight.unwrap_or(1).max(1))
+            .collect();
+        let total: u64 = weights.iter().map(|w| *w as u64).sum();
+        let mut tick = RR_COUNTER.fetch_add(1, Ordering::Relaxed) % total;
+        for (c, w) in candidates.iter().zip(&weights) {
+            if tick < *w as u64 {
+                return Some((*c).clone());
+            }
+            tick -= *w as u64;
+        }
+        candidates.last().map(|c| (*c).clone())
+    }
+
     pub fn id(&self) -> String {
         if self.data.name.is_empty() {
             self.client_name.to_string()
@@ -307,6 +328,9 @@ pub struct ModelData {
     pub output_price: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patch: Option<Value>,
+    /// Load-balancing weight for round-robin selection across same-named models
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weight: Option<u32>,
 
     // chat-only properties
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -352,6 +376,9 @@ pub struct ProviderModels {
 fn default_model_type() -> String {
     "chat".into()
 }
+
+static RR_COUNTER: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ModelType {
