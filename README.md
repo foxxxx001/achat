@@ -29,10 +29,8 @@ AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Ass
 | Basic chat: `achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
 | Help: `achat --help` | ![help](pic/help.png) |
 | List all providers: `achat -qa` | ![list-all](pic/qa.png) |
-| List client names: `achat -qn` | ![list-name](pic/qn.png) |
 | Find models across providers: `achat -q glm` | ![find-models](pic/q.png) |
 | Search models.dev providers: `achat --webp deepseek` | ![webp](pic/webp.png) |
-| Search models.dev models: `achat --webm glm-4.6` | ![webm](pic/webm.png) |
 
 ## Configuration
 

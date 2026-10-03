@@ -29,10 +29,8 @@ AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具
 | 基础聊天：`achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
 | 帮助：`achat --help` | ![help](pic/help.png) |
 | 列出全部供应商：`achat -qa` | ![list-all](pic/qa.png) |
-| 列出已配置客户端：`achat -qn` | ![list-name](pic/qn.png) |
 | 跨供应商搜索模型：`achat -q glm` | ![find-models](pic/q.png) |
 | 搜索 models.dev 供应商：`achat --webp deepseek` | ![webp](pic/webp.png) |
-| 搜索 models.dev 模型：`achat --webm glm-4.6` | ![webm](pic/webm.png) |
 
 ## 配置
 
