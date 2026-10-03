@@ -22,6 +22,18 @@ AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具
 - **JSON 输出**：`-p json` 适用于 `--list-all`、`-q`、`-webp`、`-webm`、`-webm-cn`。
 - **服务模式**：兼容 OpenAI 的 API 服务（含 `/v1/responses` 端点）+ Web UI。
 
+## 截图（Linux）
+
+| 功能 | 截图 |
+| --- | --- |
+| 基础聊天：`achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
+| 帮助：`achat --help` | ![help](pic/help.png) |
+| 列出全部供应商：`achat -qa` | ![list-all](pic/qa.png) |
+| 列出已配置客户端：`achat -qn` | ![list-name](pic/qn.png) |
+| 跨供应商搜索模型：`achat -q glm` | ![find-models](pic/q.png) |
+| 搜索 models.dev 供应商：`achat --webp deepseek` | ![webp](pic/webp.png) |
+| 搜索 models.dev 模型：`achat --webm glm-4.6` | ![webm](pic/webm.png) |
+
 ## 配置
 
 首次启动时 AChat 会引导你选择供应商并生成 `~/.config/achat/config.yaml`。随时可以重新运行或扩展配置：

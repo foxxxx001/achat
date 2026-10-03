@@ -22,6 +22,18 @@ AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Ass
 - **JSON output**: `-p json` for `--list-all`, `-q`, `-webp`, `-webm`, `-webm-cn`.
 - **Serve mode**: OpenAI-compatible API server including the `/v1/responses` endpoint, plus a Web UI.
 
+## Screenshots (Linux)
+
+| Function | Screenshot |
+| --- | --- |
+| Basic chat: `achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
+| Help: `achat --help` | ![help](pic/help.png) |
+| List all providers: `achat -qa` | ![list-all](pic/qa.png) |
+| List client names: `achat -qn` | ![list-name](pic/qn.png) |
+| Find models across providers: `achat -q glm` | ![find-models](pic/q.png) |
+| Search models.dev providers: `achat --webp deepseek` | ![webp](pic/webp.png) |
+| Search models.dev models: `achat --webm glm-4.6` | ![webm](pic/webm.png) |
+
 ## Configuration
 
 On first launch AChat asks you to pick a provider and writes `~/.config/achat/config.yaml`. To redo or extend this at any time:
