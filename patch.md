@@ -1,5 +1,10 @@
 ## achat v0.8.9 — Patch Notes
 
+0. README.md / readme_zh.md: added real run-effect examples for
+   `achat --webm deepseek --free`, `achat --webp Xiaomi` and
+   `achat --webm-cn deepseek`; added the missing `--webm-cn` line to the
+   models.dev / datalearner command examples.
+
 1. Documentation cleanup: removed all `-q` / `-qa` / `-qn` references from
    README.md and readme_zh.md; deleted the obsolete `pic/qa.png` and `pic/q.png`
    screenshots (remaining: chat.png, help.png, webp.png).

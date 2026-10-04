@@ -106,6 +106,38 @@ achat --webm                        # 列出 models.dev 全部模型
 achat --webm glm-4.6                # 按关键词过滤（上下文/价格/能力）
 achat -o json --webm glm-4.6        # JSON 输出
 achat --webm --free                 # 只显示输入/输出价格均为 0 的模型
+achat --webm-cn deepseek            # 搜索 datalearner.com 中文模型目录
+```
+
+运行效果示例：
+
+```text
+$ achat --webp Xiaomi
+id                       name                       models  api_base                                       doc
+xiaomi                   Xiaomi                          9  https://api.xiaomimimo.com/v1                  https://platform.xiaomimimo.com/#/docs
+xiaomi-token-plan-ams    Xiaomi Token Plan (Euro…        9  https://token-plan-ams.xiaomimimo.com/v1       https://platform.xiaomimimo.com/#/docs
+xiaomi-token-plan-cn     Xiaomi Token Plan (Chin…        9  https://token-plan-cn.xiaomimimo.com/v1        https://platform.xiaomimimo.com/#/docs
+xiaomi-token-plan-sgp    Xiaomi Token Plan (Sing…        9  https://token-plan-sgp.xiaomimimo.com/v1       https://platform.xiaomimimo.com/#/docs
+
+4 providers matched 'Xiaomi'.
+
+$ achat --webm deepseek --free
+provider             model                                        context    output     in$/M    out$/M  flags
+agentrouter          deepseek-v4-flash [DeepSeek V4 Flash]             1M      384k         -         -  RT
+alibaba-cn           deepseek-r1-distill-llama-8b [DeepSeek …         32k       16k      0.00      0.00  RT
+alibaba-cn           deepseek-r1-distill-qwen-1-5b [DeepSeek…         32k       16k      0.00      0.00  RT
+alibaba-token-plan   deepseek-v3.2 [DeepSeek V3.2]                   131k       65k      0.00      0.00  RT
+...
+63 models matched 'deepseek'. Flags: V=vision R=reasoning T=tool-call
+
+$ achat --webm-cn deepseek
+model                            name                       org/type                   params  published
+deepseek-v4-1-flash              DeepSeek-V4.1-Flash        DeepSeek-AI / 多模态大模型         552B  2026-09-10
+deepseek-v4-flash-vision-exp     DeepSeek-V4-Flash-Visio…   DeepSeek-AI / 多模态大模型         305B  2026-08-21
+deepseek-v4-pro-0813             DeepSeek V4 Pro 0813       DeepSeek-AI / 推理大模型             -  2026-08-13
+deepseek-v4-pro                  DeepSeek-V4-Pro            DeepSeek-AI / 推理大模型          1.6T  2026-08-13
+...
+20 models matched. 详情: https://www.datalearner.com/ai-models/pretrained-models/<model>
 ```
 
 ### 权重轮询（`-m model_name`）
