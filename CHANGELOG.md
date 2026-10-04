@@ -1,3 +1,35 @@
+## achat v0.8.9 — Patch Notes
+
+1. `-provider <NAME>`: the api_key is now returned in full (no masking).
+
+2. Removed the `-qa` alias (use `--list-all` or `-provider` with no argument).
+
+3. Removed the `--list-models` flag; `-model` with no argument keeps the same
+   output (configured chat models).
+
+4. `-webp` with no argument lists ALL providers on models.dev; with a keyword
+   it filters as before.
+
+5. `-webm` with no argument lists ALL models on models.dev; with a keyword it
+   filters as before. New options: `-o json` (JSON output) and `--free`
+   (only models whose in$/M AND out$/M are both 0).
+
+## achat v0.8.8 — Patch Notes
+
+1. `-qn` renamed to `-provider` / `--provider` with new semantics:
+   - `-provider` (no argument): identical output to `-qa`/`--list-all` — lists
+     all built-in + OpenAI-compatible providers (name / api_base / open).
+   - `-provider <NAME>`: finds every client in config.yaml whose name contains
+     NAME (case-insensitive), calls its `/v1/models`, and prints api_base,
+     api_key (masked) and the returned model ids.
+
+2. `-q` renamed to `-model` / `--find-models`:
+   - `-model` (no argument): same output as `--list-models`.
+   - `-model <KEYWORD>`: same multi-threaded model search as before.
+
+3. Both artifacts (Windows exe and Linux binary) are UPX-compressed from this
+   release on, and the release is also delivered by email to xxug@163.com.
+
 ## achat v0.8.7 — Patch Notes
 
 1. `-webm-cn`: new shorthand alias of `--webm-cn`.

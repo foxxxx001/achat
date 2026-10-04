@@ -8,17 +8,21 @@ const VERSION_EXTRA: &str = concat!(env!("CARGO_PKG_VERSION"), "\nMade by Gary-C
 static OUTPUT_FORMAT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
 
 /// Normalize alias flags before clap parsing (clap shorts are single-char,
-/// so `-qa` / `-qn` / `-webp` / `-webm` are mapped to their long forms).
+/// so `-qn` / `-webp` / `-webm` / `-model` are mapped to their long forms).
 pub fn normalize_args(args: &mut Vec<String>) {
-    for a in args.iter_mut() {
+    // arg-aware: `-model` (with value) => --find-models; bare `-model` => --list-models
+    let mut i = 0;
+    while i < args.len() {
+        let a = args[i].clone();
         match a.as_str() {
-            "-qa" => *a = "--list-all".to_string(),
-            "-qn" => *a = "--list-name".to_string(),
-            "-webp" => *a = "--webp".to_string(),
-            "-webm" => *a = "--webm".to_string(),
-            "-webm-cn" => *a = "--webm-cn".to_string(),
+            "-webp" => args[i] = "--webp".to_string(),
+            "-webm" => args[i] = "--webm".to_string(),
+            "-webm-cn" => args[i] = "--webm-cn".to_string(),
+            "-provider" => args[i] = "--provider".to_string(),
+            "-model" => args[i] = "--find-models".to_string(),
             _ => {}
         }
+        i += 1;
     }
 }
 
@@ -111,18 +115,28 @@ pub struct Cli {
     /// Sync all providers/models from the models.dev catalog into models.yaml
     #[clap(long = "sync-all")]
     pub sync_all: bool,
-    /// Search models by keyword; "provider:" limits to one provider; prints provider:model
-    #[clap(short = 'q', value_name = "KEYWORD")]
+    /// Search models by keyword (alias: -model <KEYWORD>); no value = --list-models
+    #[clap(long = "find-models", value_name = "KEYWORD", num_args = 0..=1, default_missing_value = "")]
     pub find_models: Option<String>,
+    /// List providers; with a name filter, query that provider's /v1/models (alias: -provider [NAME])
+    #[clap(long = "provider", value_name = "NAME", num_args = 0..=1, default_missing_value = "")]
+    pub provider: Option<String>,
     /// Add/update models in config.yaml: [provider:]model | provider:* (import all)
     #[clap(long = "add", value_name = "MODEL")]
     pub add_models: Option<String>,
-    /// Search models.dev providers by keyword (alias: -webp)
-    #[clap(long = "webp", value_name = "KEYWORD")]
+    /// List models.dev providers; with keyword filter (alias: -webp [KEYWORD])
+    #[clap(long = "webp", value_name = "KEYWORD", num_args = 0..=1, default_missing_value = "")]
     pub webp: Option<String>,
-    /// Search models.dev models by keyword (alias: -webm)
-    #[clap(long = "webm", value_name = "KEYWORD")]
+    /// List models.dev models; with keyword filter (alias: -webm [KEYWORD]);
+    /// combine with -o json or --free (in$/M and out$/M both 0)
+    #[clap(long = "webm", value_name = "KEYWORD", num_args = 0..=1, default_missing_value = "")]
     pub webm: Option<String>,
+    /// Output format: "json" (for -webp / -webm etc.)
+    #[clap(short = 'o', value_name = "FORMAT")]
+    pub out_format: Option<String>,
+    /// With --webm: only show models whose input AND output price are both 0
+    #[clap(long)]
+    pub free: bool,
     /// Search datalearner.com models by keyword (alias: -webm-cn)
     #[clap(long = "webm-cn", value_name = "KEYWORD")]
     pub webm_cn: Option<String>,
@@ -132,9 +146,6 @@ pub struct Cli {
     /// (dev) fetch models.dev and append providers missing from the built-in list
     #[clap(long = "update-providers", hide = true)]
     pub update_providers: bool,
-    /// List all available chat models
-    #[clap(long)]
-    pub list_models: bool,
     /// List all roles
     #[clap(long)]
     pub list_roles: bool,

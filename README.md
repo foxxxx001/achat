@@ -75,9 +75,9 @@ deepseek               https://api.deepseek.com                               n
 ### Finding & adding models
 
 ```sh
-achat -q glm                        # search open + configured providers for "glm"
-achat -p json -q glm                # same search, JSON array output
-achat -q openrouter:               # list only openrouter's models
+achat -model glm                    # search open + configured providers for "glm"
+achat -p json -model glm            # same search, JSON array output
+achat -model openrouter:           # list only openrouter's models
 achat --add openrouter:zai-org/glm-5.3   # add one model to a specific provider
 achat --add glm-5.3                      # try every configured provider
 achat --add 'openrouter:*'              # import ALL of a provider's models
@@ -102,11 +102,13 @@ achat --out codex                   # add [model_providers.*] sections to ~/.cod
 ### models.dev queries
 
 ```sh
-achat --webp glm                    # search models.dev providers (id/name/api/doc)
+achat --webp                        # list ALL providers on models.dev
+achat --webp deepseek               # filter by keyword (id/name/api/doc)
 achat --webp openai:deepseek        # restrict to OpenAI-compatible providers
-achat -p json --webp deepseek       # JSON output
-achat --webm glm-4.6                # search all models.dev models (limits, pricing, flags)
-achat -p json --webm glm-4.6        # JSON output
+achat --webm                        # list ALL models on models.dev
+achat --webm glm-4.6                # filter by keyword (limits, pricing, flags)
+achat -o json --webm glm-4.6        # JSON output
+achat --webm --free                 # only models with in$/M and out$/M both 0
 ```
 
 ### Weighted round-robin (`-m model_name`)

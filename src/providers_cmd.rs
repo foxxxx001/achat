@@ -329,11 +329,17 @@ async fn fetch_catalog(abort_signal: &crate::utils::AbortSignal) -> Result<serde
 /// --webp <keyword>: case-insensitive search of models.dev providers. Each result
 /// shows the provider name, model count, API base and documentation URL. Prefix
 /// the keyword with `openai:` to restrict to OpenAI-compatible providers.
-pub async fn web_providers(keyword: &str, abort_signal: crate::utils::AbortSignal) -> Result<()> {
+pub async fn web_providers(
+    keyword: Option<&str>,
+    abort_signal: crate::utils::AbortSignal,
+) -> Result<()> {
     let catalog = fetch_catalog(&abort_signal).await?;
-    let (openai_only, kw) = match keyword.strip_prefix("openai:") {
-        Some(k) => (true, k.to_lowercase()),
-        None => (false, keyword.to_lowercase()),
+    let (openai_only, kw) = match keyword {
+        Some(k) => match k.strip_prefix("openai:") {
+            Some(k2) => (true, k2.to_lowercase()),
+            None => (false, k.to_lowercase()),
+        },
+        None => (false, String::new()),
     };
 
     let threads = worker_threads();
@@ -356,7 +362,7 @@ pub async fn web_providers(keyword: &str, abort_signal: crate::utils::AbortSigna
                     continue;
                 }
                 let hay = format!("{id} {name} {api} {doc}").to_lowercase();
-                if !hay.contains(&kw) {
+                if !kw.is_empty() && !hay.contains(&kw) {
                     continue;
                 }
                 let count = e
@@ -383,7 +389,10 @@ pub async fn web_providers(keyword: &str, abort_signal: crate::utils::AbortSigna
     rows.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
 
     if rows.is_empty() {
-        println!("No providers matched '{keyword}' on models.dev.");
+        match keyword {
+            Some(k) => println!("No providers matched '{k}' on models.dev."),
+            None => println!("No providers found on models.dev."),
+        }
         return Ok(());
     }
     if crate::cli::output_format() == Some("json") {
@@ -404,16 +413,23 @@ pub async fn web_providers(keyword: &str, abort_signal: crate::utils::AbortSigna
             truncate(r["doc"].as_str().unwrap_or(""), 40)
         );
     }
-    println!("\n{} providers matched.", rows.len());
+    match keyword {
+        Some(k) => println!("\n{} providers matched '{k}'.", rows.len()),
+        None => println!("\n{} providers total.", rows.len()),
+    }
     Ok(())
 }
 
 /// --webm <keyword>: case-insensitive search of every model in the models.dev
 /// catalog; shows provider, model id/name, context & output limits, pricing and
 /// capability flags. Rows are collected by worker threads (= CPU cores).
-pub async fn web_models(keyword: &str, abort_signal: crate::utils::AbortSignal) -> Result<()> {
+pub async fn web_models(
+    keyword: Option<&str>,
+    free_only: bool,
+    abort_signal: crate::utils::AbortSignal,
+) -> Result<()> {
     let catalog = fetch_catalog(&abort_signal).await?;
-    let kw = keyword.to_lowercase();
+    let kw = keyword.unwrap_or("").to_lowercase();
 
     let threads = worker_threads();
     debug!("webm: searching with {threads} threads");
@@ -434,11 +450,24 @@ pub async fn web_models(keyword: &str, abort_signal: crate::utils::AbortSignal) 
                 for (mid, m) in models {
                     let name = m.get("name").and_then(|v| v.as_str()).unwrap_or(mid);
                     let hay = format!("{pid} {mid} {name}").to_lowercase();
-                    if !hay.contains(&kw) {
+                    if !kw.is_empty() && !hay.contains(&kw) {
                         continue;
                     }
                     let limit = m.get("limit");
                     let cost = m.get("cost");
+                    if free_only {
+                        let ip = cost
+                            .and_then(|c| c.get("input"))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        let op = cost
+                            .and_then(|c| c.get("output"))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        if ip != 0.0 || op != 0.0 {
+                            continue;
+                        }
+                    }
                     local.push(serde_json::json!({
                         "provider": pid, "id": mid, "name": name,
                         "context": limit.and_then(|l| l.get("context")).and_then(|v| v.as_u64()),
@@ -467,7 +496,12 @@ pub async fn web_models(keyword: &str, abort_signal: crate::utils::AbortSignal) 
     });
 
     if rows.is_empty() {
-        println!("No models matched '{keyword}' on models.dev.");
+        match (keyword, free_only) {
+            (Some(k), true) => println!("No free models matched '{k}' on models.dev."),
+            (Some(k), false) => println!("No models matched '{k}' on models.dev."),
+            (None, true) => println!("No free models found on models.dev."),
+            (None, false) => println!("No models found on models.dev."),
+        }
         return Ok(());
     }
     if crate::cli::output_format() == Some("json") {
@@ -505,10 +539,16 @@ pub async fn web_models(keyword: &str, abort_signal: crate::utils::AbortSignal) 
             flags
         );
     }
-    println!(
-        "\n{} models matched. Flags: V=vision R=reasoning T=tool-call",
-        rows.len()
-    );
+    match keyword {
+        Some(k) => println!(
+            "\n{} models matched '{k}'. Flags: V=vision R=reasoning T=tool-call",
+            rows.len()
+        ),
+        None => println!(
+            "\n{} models total. Flags: V=vision R=reasoning T=tool-call",
+            rows.len()
+        ),
+    }
     Ok(())
 }
 
@@ -832,4 +872,78 @@ fn unescape_js(s: &str) -> String {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------
+// -provider / --provider
+// ---------------------------------------------------------------------------
+
+/// `-provider` with no value: identical output to `--list-all` (all built-in
+/// providers, three columns; `-p json` supported). Runs before config init.
+pub fn list_all_cmd() -> Result<()> {
+    use crate::providers::PROVIDERS;
+    if crate::cli::output_format() == Some("json") {
+        let items: Vec<Value> = PROVIDERS
+            .iter()
+            .map(|(n, b, o)| serde_json::json!({"name": n, "api_base": b, "open": *o == "y"}))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&items)?);
+        return Ok(());
+    }
+    if crate::i18n::is_cn() {
+        println!("共 {} 个供应商\n", PROVIDERS.len());
+        println!("{:<22} {:<55} open", "name", "api_base");
+    } else {
+        println!("Total: {} providers\n", PROVIDERS.len());
+        println!("{:<22} {:<55} open", "name", "api_base");
+    }
+    for (n, b, o) in PROVIDERS.iter() {
+        println!("{:<22} {:<55} {o}", n, b);
+    }
+    Ok(())
+}
+
+/// `-provider <NAME>`: find every client in config.yaml whose name contains
+/// NAME (case-insensitive) and GET its /v1/models; print api_base, api_key
+/// (masked) and the returned model ids.
+pub async fn provider_query(config: &crate::config::Config, name: &str) -> Result<()> {
+    use crate::client::{ClientConfig, OpenAICompatibleClient};
+    let kw = name.to_lowercase();
+    let mut found = false;
+    for c in &config.clients {
+        if let ClientConfig::OpenAICompatibleConfig(cfg) = c {
+            let client = cfg
+                .name
+                .clone()
+                .unwrap_or_else(|| OpenAICompatibleClient::NAME.to_string());
+            if !client.to_lowercase().contains(&kw) {
+                continue;
+            }
+            found = true;
+            let base = cfg.api_base.clone().unwrap_or_default();
+            let key = cfg.api_key.clone();
+            let shown = match &key {
+                Some(k) if !k.is_empty() => k.clone(),
+                _ => "(none)".to_string(),
+            };
+            println!("provider:  {client}");
+            println!("api_base:  {base}");
+            println!("api_key:   {shown}");
+            match fetch_models(&base, key.as_deref()).await {
+                Ok(models) if !models.is_empty() => {
+                    println!("models:    {} total", models.len());
+                    for m in &models {
+                        println!("  - {m}");
+                    }
+                }
+                Ok(_) => println!("models:    (none returned)"),
+                Err(err) => println!("models:    ! {err}"),
+            }
+            println!();
+        }
+    }
+    if !found {
+        bail!("No client whose name contains '{name}' found in config.yaml");
+    }
+    Ok(())
 }

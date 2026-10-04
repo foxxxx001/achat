@@ -74,9 +74,9 @@ deepseek               https://api.deepseek.com                               n
 ### 查找与添加模型
 
 ```sh
-achat -q glm                        # 在开放 + 已配置供应商中搜索 "glm"
-achat -p json -q glm                # 同样的搜索，JSON 数组输出
-achat -q openrouter:               # 只列出 openrouter 的模型
+achat -model glm                    # 在开放 + 已配置供应商中搜索 "glm"
+achat -p json -model glm            # 同样的搜索，JSON 数组输出
+achat -model openrouter:           # 只列出 openrouter 的模型
 achat --add openrouter:zai-org/glm-5.3   # 添加单个模型到指定供应商
 achat --add glm-5.3                      # 轮询所有已配置供应商
 achat --add 'openrouter:*'              # 导入该供应商的全部模型
@@ -101,11 +101,13 @@ achat --out codex                   # 向 ~/.codex/config.toml 添加 [model_pro
 ### models.dev 在线查询
 
 ```sh
-achat --webp glm                    # 在 models.dev 搜索供应商（id/名称/接口/文档）
+achat --webp                        # 列出 models.dev 全部供应商
+achat --webp deepseek               # 按关键词过滤（id/名称/接口/文档）
 achat --webp openai:deepseek        # 仅限 OpenAI 兼容供应商
-achat -p json --webp deepseek       # JSON 输出
-achat --webm glm-4.6                # 搜索 models.dev 全部模型（上下文/价格/能力）
-achat -p json --webm glm-4.6        # JSON 输出
+achat --webm                        # 列出 models.dev 全部模型
+achat --webm glm-4.6                # 按关键词过滤（上下文/价格/能力）
+achat -o json --webm glm-4.6        # JSON 输出
+achat --webm --free                 # 只显示输入/输出价格均为 0 的模型
 ```
 
 ### 权重轮询（`-m model_name`）

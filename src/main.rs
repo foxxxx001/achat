@@ -48,7 +48,11 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     let cli = Cli::parse_from(argv);
-    crate::cli::set_output_format(cli.print_format.clone());
+    crate::cli::set_output_format(
+        cli.print_format
+            .clone()
+            .or_else(|| cli.out_format.clone()),
+    );
     let text = cli.text()?;
     let working_mode = if cli.name.is_some() || cli.init || cli.list_name {
         WorkingMode::Cmd
@@ -59,6 +63,12 @@ async fn main() -> Result<()> {
     } else {
         WorkingMode::Cmd
     };
+    if let Some(p) = &cli.provider {
+        if p.is_empty() {
+            return crate::providers_cmd::list_all_cmd();
+        }
+    }
+
     if cli.list_all {
         use crate::i18n::is_cn;
         use crate::providers::PROVIDERS;
@@ -84,7 +94,7 @@ async fn main() -> Result<()> {
     }
 
     let info_flag = cli.info
-        || cli.list_models
+
         || cli.list_roles
         || cli.list_agents
         || cli.list_rags
@@ -103,11 +113,16 @@ async fn main() -> Result<()> {
     }
 
     if let Some(kw) = &cli.webp {
-        return crate::providers_cmd::web_providers(&kw, create_abort_signal()).await;
+        return crate::providers_cmd::web_providers(if kw.is_empty() { None } else { Some(kw) }, create_abort_signal()).await;
     }
 
     if let Some(kw) = &cli.webm {
-        return crate::providers_cmd::web_models(&kw, create_abort_signal()).await;
+        return crate::providers_cmd::web_models(
+            if kw.is_empty() { None } else { Some(kw) },
+            cli.free,
+            create_abort_signal(),
+        )
+        .await;
     }
 
     let config = Arc::new(RwLock::new(Config::init(working_mode, info_flag).await?));
@@ -156,21 +171,28 @@ async fn run(config: GlobalConfig, cli: Cli, text: Option<String>) -> Result<()>
     }
 
     if let Some(kw) = &cli.find_models {
+        if kw.is_empty() {
+            // `-model` with no value: same output as --list-models
+            for model in list_models(&config.read(), ModelType::Chat) {
+                println!("{}", model.id());
+            }
+            return Ok(());
+        }
         let results = crate::providers_cmd::find_models(&config, kw).await?;
         crate::providers_cmd::print_find_results(&results);
         return Ok(());
+    }
+
+    if let Some(p) = &cli.provider {
+        if !p.is_empty() {
+            return crate::providers_cmd::provider_query(&config.read(), p).await;
+        }
     }
 
     if let Some(spec) = &cli.add_models {
         return crate::providers_cmd::add_models(&config, spec).await;
     }
 
-    if cli.list_models {
-        for model in list_models(&config.read(), ModelType::Chat) {
-            println!("{}", model.id());
-        }
-        return Ok(());
-    }
     if cli.list_roles {
         let roles = Config::list_roles(true).join("\n");
         println!("{roles}");

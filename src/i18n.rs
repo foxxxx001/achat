@@ -104,9 +104,8 @@ All-in-one LLM CLI 工具（fork 自 aichat，支持 Responses API）。
       --serve [<地址>]             启动 LLM API 与 Web 服务
   -n, --name <NAME>                按名称选择客户端并 GET 其 /v1/models
       --init                       交互式初始化/扩展配置文件
-  -qn, --list-name                列出 config.yaml 中定义的客户端名称
-  -qa, --list-all                  列出所有支持的供应商（内置 + openai 兼容）
-  -p, --print-format <FORMAT>      输出格式：--list-all/--webp/--webm/-q 支持 json
+  -provider, --provider [<名称>]  无参数=列出全部供应商；带名称=查询匹配客户端的接口与模型
+  -o, --out-format <FORMAT>       输出格式：--webp/--webm 支持 json
   -e, --execute                    用自然语言执行命令
   -c, --code                       仅输出代码
   -f, --file <FILE>                包含文件、目录或 URL
@@ -114,13 +113,13 @@ All-in-one LLM CLI 工具（fork 自 aichat，支持 Responses API）。
       --dry-run                    只显示消息而不发送
       --info                       显示信息
       --sync-all                   从 models.dev 同步全部供应商/模型到 models-override.yaml
-  -q, --find-models <KEYWORD>      搜索模型；"provider:" 限定单个供应商；多线程并行探测
+  -model, --find-models [<关键词>] 无参数=列出已配置模型；带关键词=多线程并行搜索模型
       --add <MODEL>                添加/更新模型: [provider:]model | provider:*（全量导入）
-  -webp, --webp <KEYWORD>         在 models.dev 搜索供应商（名称/模型数/接口/文档）
-  -webm, --webm <KEYWORD>         在 models.dev 搜索模型（上下文/价格/能力）
+  -webp, --webp [<关键词>]        列出 models.dev 全部供应商；带关键词则过滤
+  -webm, --webm [<关键词>]        列出 models.dev 全部模型；带关键词则过滤；
+                                 配合 -o json 输出 JSON；--free 只显示输入/输出价格均为 0 的模型
   -webm-cn, --webm-cn <KEYWORD>   在 datalearner.com 搜索模型信息（不区分大小写）
       --out <TOOL>                 将 config.yaml 已配置模型导出到 litellm | opencode | codex 配置文件
-      --list-models                列出所有可用聊天模型
       --list-roles                 列出所有角色
       --list-sessions              列出所有会话
       --list-agents                列出所有 agent
