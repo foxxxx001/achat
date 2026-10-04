@@ -1,3 +1,23 @@
+## achat v0.8.9 — Patch Notes
+
+1. Documentation cleanup: removed all `-q` / `-qa` / `-qn` references from
+   README.md and readme_zh.md; deleted the obsolete `pic/qa.png` and `pic/q.png`
+   screenshots (remaining: chat.png, help.png, webp.png).
+
+2. `-provider <NAME>`: the api_key is now returned in full (no masking).
+
+3. Removed the `-qa` alias (use `--list-all` or `-provider` with no argument).
+
+4. Removed the `--list-models` flag; `-model` with no argument keeps the same
+   output (configured chat models).
+
+5. `-webp` with no argument lists ALL providers on models.dev; with a keyword
+   it filters as before.
+
+6. `-webm` with no argument lists ALL models on models.dev; with a keyword it
+   filters as before. New options: `-o json` (JSON output) and `--free`
+   (only models whose in$/M AND out$/M are both 0).
+
 ## achat v0.8.5 — Patch Notes
 
 1. `-qa`: new shorthand alias of `--list-all` (the long option still works).

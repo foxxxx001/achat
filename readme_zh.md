@@ -7,11 +7,11 @@ AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具
 ## 特性
 
 - **一体化 LLM 命令行工具**：CMD 与交互式 REPL 模式、会话、角色、代理、RAG、宏，全部集成在一个二进制里（支持 Windows 与 Linux）。
-- **内置 200+ 供应商**：OpenAI、Claude、Gemini、DeepSeek、智谱、通义千问、ModelScope（魔搭）及任意 OpenAI 兼容接口；`-qa`/`--list-all` 列出全部供应商的接口地址与免密可用标志。
+- **内置 200+ 供应商**：OpenAI、Claude、Gemini、DeepSeek、智谱、通义千问、ModelScope（魔搭）及任意 OpenAI 兼容接口；`-provider`/`--list-all` 列出全部供应商的接口地址与免密可用标志。
 - **OpenAI `/v1/responses` API 支持**：本分支的最初动机，同时兼容经典 chat completions。
-- **`--init` 增量式向导**：逐个交互式添加客户端，每完成一个即写盘 config.yaml；`-qn`/`--list-name` 列出已配置客户端。
+- **`--init` 增量式向导**：逐个交互式添加客户端，每完成一个即写盘 config.yaml；`--list-name` 列出已配置客户端。
 - **模型发现工具**：
-  - `-q <关键词>`：按 CPU 核心数多线程并行探测已配置 + 免密开放的供应商
+  - `-model <关键词>`：按 CPU 核心数多线程并行探测已配置 + 免密开放的供应商
   - `--add [provider:]model | provider:*`：先向上游验证再写入 config.yaml
   - `-webp` / `-webm`：搜索 models.dev 目录（供应商 / 模型的上下文、价格、能力标志）
   - `-webm-cn`：搜索 datalearner.com 模型库（中文大模型数据库）
@@ -19,7 +19,7 @@ AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具
 - **权重轮询 `-m model`**：纯模型名会在所有提供该模型的客户端间负载均衡；`weight:` 控制比例。
 - **导出到其他工具（`--out`）**：将已配置模型合并进 litellm（model_list）、opencode.json（provider.models）或 codex config.toml（model_providers）——幂等操作，自动写 .bak 备份。
 - **中英双语界面**：config.yaml 中 `language: cn`（或中文区域）切换全部提示与 `--help` 为中文，否则英文。
-- **JSON 输出**：`-p json` 适用于 `--list-all`、`-q`、`-webp`、`-webm`、`-webm-cn`。
+- **JSON 输出**：`-p json` 适用于 `--list-all`、`-model`、`-webp`、`-webm`、`-webm-cn`。
 - **服务模式**：兼容 OpenAI 的 API 服务（含 `/v1/responses` 端点）+ Web UI。
 
 ## 截图（Linux）
@@ -28,8 +28,6 @@ AChat（基于 AIChat v0.30.0 的分支）是一体化 LLM 命令行工具，具
 | --- | --- |
 | 基础聊天：`achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
 | 帮助：`achat --help` | ![help](pic/help.png) |
-| 列出全部供应商：`achat -qa` | ![list-all](pic/qa.png) |
-| 跨供应商搜索模型：`achat -q glm` | ![find-models](pic/q.png) |
 | 搜索 models.dev 供应商：`achat --webp deepseek` | ![webp](pic/webp.png) |
 
 ## 配置
@@ -96,7 +94,7 @@ achat --out litellm                 # 将 config.yaml 模型合并进 litellm �
 achat --out opencode                # 合并进 opencode.json 的 provider.models
 achat --out codex                   # 向 ~/.codex/config.toml 添加 [model_providers.*]
 ```
-`-qa` 是 `--list-all` 的简写别名。
+
 
 ### models.dev 在线查询
 
@@ -150,8 +148,8 @@ clients:
 | `-S, --no-stream` | 关闭流式输出 |
 | `--dry-run` | 仅显示消息而不发送 |
 | `--info` | 显示信息 |
-| `-q <关键词>` | 多线程并行搜索模型（线程数 = CPU 核心数）；`provider:` 只列出该供应商的模型 |
-| `-p <格式>` | `--list-all` 与 `-q` 的输出格式：`json` 输出 JSON 数组 |
+| `-model <关键词>` | 多线程并行搜索模型（线程数 = CPU 核心数）；`provider:` 只列出该供应商的模型 |
+| `-p <格式>` | `--list-all` 与 `-model` 的输出格式：`json` 输出 JSON 数组 |
 | `--add <[provider:]model\|provider:*>` | 上游验证后添加/更新模型到 config.yaml；`provider:*` 导入该供应商全部模型 |
 | `--sync-all` | 从 models.dev 目录同步全部供应商/模型到 models.yaml |
 | `--list-models` | 列出所有可用的对话模型 |

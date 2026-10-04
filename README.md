@@ -7,11 +7,11 @@ AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Ass
 ## Features
 
 - **All-in-one LLM CLI**: CMD & interactive REPL modes, sessions, roles, agents, RAG, macros — everything in one binary (Windows & Linux).
-- **200+ built-in providers**: OpenAI, Claude, Gemini, DeepSeek, Zhipu, Qwen, ModelScope and any OpenAI-compatible endpoint; `-qa`/`--list-all` lists them with api_base and keyless-availability flags.
+- **200+ built-in providers**: OpenAI, Claude, Gemini, DeepSeek, Zhipu, Qwen, ModelScope and any OpenAI-compatible endpoint; `-provider`/`--list-all` lists them with api_base and keyless-availability flags.
 - **OpenAI `/v1/responses` API support**: the original fork motivation, alongside classic chat completions.
-- **`--init` incremental wizard**: interactively add clients one at a time, config.yaml written after every step; `-qn`/`--list-name` lists configured clients.
+- **`--init` incremental wizard**: interactively add clients one at a time, config.yaml written after every step; `--list-name` lists configured clients.
 - **Model discovery tools**:
-  - `-q <KEYWORD>`: multi-threaded (CPU-core count) parallel probe of configured + keyless-open providers
+  - `-model <KEYWORD>`: multi-threaded (CPU-core count) parallel probe of configured + keyless-open providers
   - `--add [provider:]model | provider:*`: verify upstream then write into config.yaml
   - `-webp` / `-webm`: search the models.dev catalog (providers / models with limits, pricing, capability flags)
   - `-webm-cn`: search the datalearner.com model directory (Chinese model database)
@@ -19,7 +19,7 @@ AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Ass
 - **Weighted round-robin `-m model`**: bare model names load-balance across every client serving that model; `weight:` controls the ratio.
 - **Export to other tools (`--out`)**: merge configured models into litellm (model_list), opencode.json (provider.models) or codex config.toml (model_providers) — idempotent, with .bak backups.
 - **Bilingual UI**: `language: cn` in config.yaml (or a Chinese locale) switches prompts and `--help` to Chinese; otherwise English.
-- **JSON output**: `-p json` for `--list-all`, `-q`, `-webp`, `-webm`, `-webm-cn`.
+- **JSON output**: `-p json` for `--list-all`, `-model`, `-webp`, `-webm`, `-webm-cn`.
 - **Serve mode**: OpenAI-compatible API server including the `/v1/responses` endpoint, plus a Web UI.
 
 ## Screenshots (Linux)
@@ -28,8 +28,6 @@ AChat (fork of AIChat v0.30.0) is an all-in-one LLM CLI tool featuring Shell Ass
 | --- | --- |
 | Basic chat: `achat -S "hello, who are you?"` | ![chat](pic/chat.png) |
 | Help: `achat --help` | ![help](pic/help.png) |
-| List all providers: `achat -qa` | ![list-all](pic/qa.png) |
-| Find models across providers: `achat -q glm` | ![find-models](pic/q.png) |
 | Search models.dev providers: `achat --webp deepseek` | ![webp](pic/webp.png) |
 
 ## Configuration
@@ -97,7 +95,7 @@ achat --out litellm                 # merge config.yaml models into litellm conf
 achat --out opencode                # merge into opencode.json provider.models
 achat --out codex                   # add [model_providers.*] sections to ~/.codex/config.toml
 ```
-`-qa` is a shorthand alias of `--list-all`.
+
 
 ### models.dev queries
 
@@ -151,8 +149,8 @@ clients:
 | `-S, --no-stream` | Turn off stream mode |
 | `--dry-run` | Display the message without sending it |
 | `--info` | Display information |
-| `-q <KEYWORD>` | Search models in parallel (one worker thread per CPU core); `provider:` lists only that provider's models |
-| `-p <FORMAT>` | Output format for `--list-all` and `-q`: `json` prints a JSON array |
+| `-model <KEYWORD>` | Search models in parallel (one worker thread per CPU core); `provider:` lists only that provider's models |
+| `-p <FORMAT>` | Output format for `--list-all` and `-model`: `json` prints a JSON array |
 | `--add <[provider:]model\|provider:*>` | Verify upstream and add/update model(s) in config.yaml; `provider:*` imports all |
 | `--sync-all` | Sync all providers/models from the models.dev catalog into models.yaml |
 | `--list-models` | List all available chat models |
