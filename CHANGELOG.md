@@ -27,9 +27,6 @@
    - `-model` (no argument): same output as `--list-models`.
    - `-model <KEYWORD>`: same multi-threaded model search as before.
 
-3. Both artifacts (Windows exe and Linux binary) are UPX-compressed from this
-   release on, and the release is also delivered by email to xxug@163.com.
-
 ## achat v0.8.7 — Patch Notes
 
 1. `-webm-cn`: new shorthand alias of `--webm-cn`.
